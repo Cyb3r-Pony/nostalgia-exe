@@ -1,0 +1,1070 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>BYTEJET — Nostalgia.exe</title>
+<link rel="icon" type="image/svg+xml" href="../favicon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=Press+Start+2P&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="shared/arcade.css" />
+<style>
+  /* ==========================================================
+     BYTEJET — game-specific overrides. Shared chrome comes
+     from shared/arcade.css.
+     ========================================================== */
+  :root {
+    --drone:        #7df9ff;  /* cyan body */
+    --drone-core:   #ff4fa1;  /* magenta core */
+    --drone-trail:  #b388ff;  /* purple data trail */
+    --obst-cyan:    #4ea5ff;
+    --obst-mag:     #ff4fa1;
+    --obst-pur:     #b388ff;
+    --laser:        #ff3377;
+    --laser-warn:   #ffcc33;
+    --shield-aura:  #7de6ff;
+    --life-orb:     #5ff07a;
+    --phase-orb:    #b388ff;
+    --slow-orb:     #ffcc33;
+    --bg-deep:      #05060f;
+    --star:         #6b7ab8;
+  }
+  [data-theme="light"] {
+    --drone:        #1a8fa8;
+    --drone-core:   #c03a7a;
+    --drone-trail:  #8565c2;
+    --obst-cyan:    #2f7cc8;
+    --obst-mag:     #c03a7a;
+    --obst-pur:     #7a58b0;
+    --laser:        #c0224a;
+    --laser-warn:   #b88818;
+    --shield-aura:  #1aa5cc;
+    --life-orb:     #2e9a52;
+    --phase-orb:    #7a58b0;
+    --slow-orb:     #b88818;
+    --bg-deep:      #e0d9c0;
+    --star:         #a8a5c0;
+  }
+
+  canvas { max-width: 100%; max-height: 100%; image-rendering: pixelated; }
+
+  .controls-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 6px 14px;
+    margin: 18px 0 22px;
+    text-align: left;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .controls-grid kbd {
+    background: var(--panel-2);
+    border: 1px solid var(--text);
+    padding: 2px 6px;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 9px;
+    min-width: 44px;
+    text-align: center;
+  }
+
+  /* Power-up legend row in start screen — icons sized as real
+     glyphs so the four power-up colors read at a glance. The old
+     9px Press-Start font hid them; the new sizing makes the colored
+     circles a visible row of icons next to their descriptions. */
+  .pu-legend {
+    display: grid;
+    grid-template-columns: 38px 1fr;
+    gap: 10px 14px;
+    align-items: center;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    margin-bottom: 22px;
+  }
+  .pu-legend span:nth-child(odd) {
+    font-family: 'JetBrains Mono', monospace;   /* unicode-friendly */
+    font-size: 26px;
+    line-height: 1;
+    text-align: center;
+    text-shadow: 0 0 6px currentColor;          /* soft neon glow */
+  }
+</style>
+</head>
+<body>
+
+<div class="bg-grid"></div>
+<div class="scanlines"></div>
+
+<header class="topbar">
+  <a href="../index.html" class="back">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    EXIT
+  </a>
+  <div class="title-tag">BYTEJET<span class="ver">v1.0.0 // DATA.STREAM</span></div>
+  <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme"></button>
+</header>
+
+<section class="hud" id="hud">
+  <div class="hud-col">
+    <div class="hud-stat score">SCORE<strong id="hudScore">000000</strong></div>
+    <div class="hud-stat">TIME<strong id="hudTime">0.0s</strong></div>
+  </div>
+  <div class="hud-col">
+    <div class="hud-stat best">BEST<strong id="hudBest">000000</strong></div>
+    <div class="hud-stat">SPEED<strong id="hudSpeed">1.0x</strong></div>
+  </div>
+  <div class="hud-col">
+    <div class="hud-stat lives">LIVES<strong id="hudLives">♥</strong></div>
+    <div class="hud-stat" id="hudPU" style="color:var(--accent-2)">BUFF<strong id="hudBuff">NONE</strong></div>
+  </div>
+</section>
+
+<div class="stage">
+  <canvas id="game" width="900" height="360"></canvas>
+</div>
+
+<footer class="bottombar">
+  <div class="keys">
+    <span><kbd>SPACE</kbd> / <kbd>↑</kbd> THRUST</span>
+    <span><kbd>P</kbd> PAUSE</span>
+    <span><kbd>M</kbd> MUTE</span>
+    <span><kbd>R</kbd> RESTART</span>
+  </div>
+  <div>© NOSTALGIA.EXE — <span class="blink">█</span></div>
+</footer>
+
+<div class="touch" id="touch">
+  <div class="right-cluster">
+    <button id="tThrust" aria-label="Thrust">▲</button>
+  </div>
+</div>
+
+<!-- Start menu -->
+<div class="overlay" id="startScreen">
+  <div class="card">
+    <div class="card-head">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span>byte_jet.app</span>
+      <span>_ □ ×</span>
+    </div>
+    <h1>BYTEJET</h1>
+    <p>A rogue packet streaming through the grid. Hold thrust to rise, release to fall — survive the data-stream as long as you can.</p>
+
+    <div class="controls-grid">
+      <kbd>SPACE</kbd><span>start / thrust (hold to climb)</span>
+      <kbd>↑</kbd><span>thrust (same as SPACE)</span>
+      <kbd>TAP</kbd><span>touch &amp; hold anywhere to thrust</span>
+      <kbd>P</kbd><span>pause</span>
+    </div>
+
+    <div class="pu-legend">
+      <span style="color:var(--shield-aura)">◎</span><span>SHIELD — absorbs one hit</span>
+      <span style="color:var(--life-orb)">♥</span><span>EXTRA LIFE — adds a respawn</span>
+      <span style="color:var(--phase-orb)">◈</span><span>PHASE — pass through obstacles for 4s</span>
+      <span style="color:var(--slow-orb)">◐</span><span>SLOW-MO — half speed for 4s</span>
+    </div>
+
+    <button class="btn" id="startBtn">▶ LAUNCH</button>
+    <button class="btn ghost" id="muteBtnMenu">♪ SOUND ON</button>
+  </div>
+</div>
+
+<!-- Pause -->
+<div class="overlay hidden" id="pauseScreen">
+  <div class="card">
+    <div class="card-head">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span>pause.sys</span>
+      <span>_ □ ×</span>
+    </div>
+    <h2>PAUSED</h2>
+    <p>Packet buffered.</p>
+    <button class="btn" id="resumeBtn">▶ RESUME</button>
+    <button class="btn ghost" id="restartBtnPause">↻ RESTART</button>
+  </div>
+</div>
+
+<!-- Game over -->
+<div class="overlay hidden" id="gameoverScreen">
+  <div class="card">
+    <div class="card-head">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span>packet_lost.log</span>
+      <span>_ □ ×</span>
+    </div>
+    <h2 style="color:var(--accent-hot)">PACKET DROPPED</h2>
+    <p>The stream closed around you.</p>
+    <div class="stat-row">
+      <div>SCORE<strong id="finalScore">000000</strong></div>
+      <div>BEST<strong id="finalBest">000000</strong></div>
+      <div>TIME<strong id="finalTime">0.0s</strong></div>
+    </div>
+    <p id="newBestMsg" style="color:var(--accent-2);margin:4px 0 16px;display:none">✦ NEW BEST ✦</p>
+    <p id="scoreStatus" class="score-status" data-state="idle"></p>
+    <button class="btn" id="retryBtn">↻ RETRY</button>
+    <a href="../index.html" class="btn ghost">◀ EXIT</a>
+  </div>
+</div>
+
+<!-- Public scoreboard plumbing -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.105.1"></script>
+<script src="../shared/supabase-config.js"></script>
+<script src="../shared/auth.js"></script>
+<script src="../shared/scores.js"></script>
+
+<script src="shared/arcade.js"></script>
+<script>
+/* =============================================================
+   BYTEJET — side-scrolling jetpack runner, cyber/data theme.
+
+   The player is a rogue data packet. Hold thrust to climb, release
+   to fall. The stream scrolls right-to-left; obstacles and power-
+   ups are spawned ahead of the player and drift into view. Score =
+   time survived × 10 (+bonus per power-up picked).
+
+   Structure:
+     • PlayerState         — position, velocity, shield/phase/slow-mo flags
+     • Obstacle            — {x, y, w, h, kind, sub}
+     • PowerUp             — {x, y, r, kind, bob}
+     • world.scrollSpeed   — ramps up over time
+     • spawn schedulers for obstacles / power-ups
+     • collision → hit() consumes shield or drops a life
+     • gameover → submitAndReport to public scoreboard
+
+   All palette lookups use Arcade.color() (cached) — no per-frame
+   getComputedStyle.
+   ============================================================= */
+
+(() => {
+const cvs = document.getElementById('game');
+const ctx = cvs.getContext('2d');
+const W = cvs.width, H = cvs.height;
+
+// ---------- Utilities from shared module ----------
+const { clamp, rand, randInt, pad, color, createAudio, createOverlayManager,
+        wireThemeToggle, fitCanvas } = Arcade;
+
+// ---------- Theme ----------
+wireThemeToggle('themeToggle');
+fitCanvas(cvs, '.stage', 16);
+
+// ---------- Audio ----------
+const sfx = createAudio('bj.muted');
+function thrustSfx() { sfx.beep(520, 0.03, 'sawtooth', 0.05); }
+function pickupSfx() { sfx.beep(820, 0.09, 'triangle', 0.14, 1240); }
+function hitSfx()    { sfx.noise(0.12, 0.22); sfx.beep(180, 0.14, 'square', 0.15, 70); }
+function deadSfx()   { sfx.beep(280, 0.4, 'sawtooth', 0.2, 70); }
+function laserSfx()  { sfx.beep(1320, 0.18, 'square', 0.05, 420); }
+
+// ---------- Overlays ----------
+const { show: showOverlay, hideAll: hideOverlays } =
+  createOverlayManager(['startScreen', 'pauseScreen', 'gameoverScreen']);
+
+// ---------- HUD ----------
+const hudScore = document.getElementById('hudScore');
+const hudTime  = document.getElementById('hudTime');
+const hudBest  = document.getElementById('hudBest');
+const hudSpeed = document.getElementById('hudSpeed');
+const hudLives = document.getElementById('hudLives');
+const hudBuff  = document.getElementById('hudBuff');
+
+// ---------- Constants ----------
+const PLAYER_X      = 160;
+const PLAYER_W      = 30;
+const PLAYER_H      = 20;
+// Slightly softer fall — was 1400/900. Drone still descends without
+// thrust but doesn't slam to the floor, which makes the early game
+// less punishing while keeping thrust a meaningful counter-force.
+const GRAVITY       = 1150;   // px/s² downward
+const THRUST_ACC    = 2600;   // px/s² upward when holding
+const MAX_DOWN_V    = 760;
+const MAX_UP_V      = 700;
+
+// Easier opening: gentler initial scroll + slower ramp. The cap is
+// only marginally lower so late-game still pressures the player.
+const BASE_SPEED    = 220;    // world scroll px/s at t=0
+const SPEED_PER_SEC = 2.0;    // linear ramp
+const SPEED_CAP     = 540;
+
+const GROUND_H      = 18;     // bottom scan bar height
+const CEIL_H        = 14;     // top scan bar height
+
+const LIVES_MAX     = 3;
+const PHASE_DUR     = 4.0;
+const SLOW_DUR      = 4.0;
+const SLOW_FACTOR   = 0.5;
+
+// Score: seconds × 10 base, + pickups
+const SCORE_PER_SEC    = 10;
+const SCORE_PER_PICKUP = 25;
+
+// ---------- State ----------
+const state = {
+  mode: 'menu',          // 'menu' | 'playing' | 'paused' | 'gameover'
+  elapsed: 0,            // world seconds survived
+  speed: BASE_SPEED,
+  slowUntil: 0,          // world-time cutoff for slow-mo
+  phaseUntil: 0,         // world-time cutoff for phase-through
+  shield: false,
+  lives: 1,
+  score: 0,
+  best: Number(localStorage.getItem('bj.best') || 0),
+
+  // player
+  py: H * 0.45,
+  pvy: 0,
+  thrusting: false,
+
+  // entities
+  obstacles: [],         // {x,y,w,h,kind,sub?}
+  pickups: [],           // {x,y,r,kind,bob}
+  particles: [],         // {x,y,vx,vy,life,max,glyph,color}
+  stars: [],             // parallax backdrop
+
+  // spawn timers — longer initial silence so the player has a beat
+  // to settle into the thrust feel before the first obstacle.
+  nextObstacleAt: 1.6,
+  nextPickupAt:   5.0,
+};
+
+function resetState() {
+  state.mode = 'playing';
+  state.elapsed = 0;
+  state.speed = BASE_SPEED;
+  state.slowUntil = 0;
+  state.phaseUntil = 0;
+  state.shield = false;
+  state.lives = 1;
+  state.score = 0;
+  state.py  = H * 0.45;
+  state.pvy = 0;
+  state.thrusting = false;
+  state.obstacles.length = 0;
+  state.pickups.length = 0;
+  state.particles.length = 0;
+  state.nextObstacleAt = 1.6;
+  state.nextPickupAt   = 5.0;
+  seedStars();
+  updateHUD();
+}
+
+// ---------- Starfield (parallax backdrop) ----------
+function seedStars() {
+  state.stars.length = 0;
+  for (let i = 0; i < 55; i++) {
+    state.stars.push({
+      x: Math.random() * W,
+      y: Math.random() * H,
+      z: 0.15 + Math.random() * 0.85,   // parallax depth factor
+      s: Math.random() < 0.3 ? 2 : 1,
+    });
+  }
+}
+
+// ---------- HUD ----------
+function updateHUD() {
+  hudScore.textContent = pad(Math.floor(state.score), 6);
+  hudTime.textContent  = state.elapsed.toFixed(1) + 's';
+  hudBest.textContent  = pad(state.best, 6);
+  const ratio = state.speed / BASE_SPEED;
+  hudSpeed.textContent = ratio.toFixed(1) + 'x';
+  hudLives.textContent = '♥'.repeat(Math.max(0, state.lives)) || '∅';
+
+  // Buff line: prioritise the strongest active effect
+  let buff = 'NONE';
+  let col  = 'var(--text-dim)';
+  if (state.shield) { buff = 'SHIELD';   col = 'var(--shield-aura)'; }
+  if (state.elapsed < state.slowUntil) {
+    buff = 'SLOW ' + (state.slowUntil - state.elapsed).toFixed(1) + 's';
+    col = 'var(--slow-orb)';
+  }
+  if (state.elapsed < state.phaseUntil) {
+    buff = 'PHASE ' + (state.phaseUntil - state.elapsed).toFixed(1) + 's';
+    col = 'var(--phase-orb)';
+  }
+  hudBuff.textContent = buff;
+  document.getElementById('hudPU').style.color = col;
+}
+
+// ---------- Spawn helpers ----------
+
+// Spawn a single obstacle. "kind" controls shape:
+//   'block'  — single floating data block (random mid-air row)
+//   'spikes' — row of small triangular spikes on floor or ceiling;
+//              forces the player to leave the rail.
+//   'wall'   — top/bottom pair leaving a gap (Flappy-style)
+//   'laser'  — horizontal beam that toggles on/off
+//   'drift'  — block that sine-oscillates vertically as it scrolls
+//
+// Pool unlocks over time so the first few seconds stay readable.
+function spawnObstacle() {
+  const t = state.elapsed;
+  const pool = ['block'];               // first beats are block-only
+  if (t >=  4) pool.push('spikes');     // simple rail-clear hazard
+  if (t >= 10) pool.push('wall');       // delayed — walls are the spike of obstacles
+  if (t >= 14) pool.push('laser');
+  if (t >= 22) pool.push('drift');
+  if (t >= 30) pool.push('wall');       // weight walls higher late-game
+  const kind = pool[randInt(0, pool.length - 1)];
+
+  if (kind === 'block') {
+    const h = randInt(32, 70);
+    const w = randInt(24, 44);
+    const y = rand(CEIL_H + 18, H - GROUND_H - h - 18);
+    state.obstacles.push({ kind:'block', x: W + 40, y, w, h, hue: pickHue() });
+
+  } else if (kind === 'spikes') {
+    // 2-6 small spikes, either floor (pointing up) or ceiling
+    // (pointing down). Player has to be off the rail to clear them.
+    // Bias higher counts only as the run progresses so early rows
+    // stay readable.
+    const SPIKE_W = 14, GAP = 2, SPIKE_H = 12;
+    const maxCount = clamp(2 + Math.floor(t / 8), 2, 6);
+    const count = randInt(2, maxCount);
+    const onCeiling = Math.random() < 0.5;
+    const w = count * SPIKE_W + (count - 1) * GAP;
+    const y = onCeiling ? CEIL_H : H - GROUND_H - SPIKE_H;
+    state.obstacles.push({
+      kind:'spikes',
+      x: W + 40,
+      y, w, h: SPIKE_H,
+      count, onCeiling,
+      hue: '--obst-mag',
+    });
+
+  } else if (kind === 'wall') {
+    // Gap height shrinks as game speeds up. Eased from the earlier
+    // ramp so the early walls feel forgiving.
+    const gap = clamp(Math.round(180 - t * 1.0), 115, 180);
+    const topH = randInt(Math.max(20, CEIL_H + 10), H - GROUND_H - gap - 30);
+    state.obstacles.push({ kind:'wall', x: W + 40, y: CEIL_H, w: 34, h: topH, hue:'--obst-mag' });
+    state.obstacles.push({
+      kind:'wall',
+      x: W + 40,
+      y: CEIL_H + topH + gap,
+      w: 34,
+      h: H - GROUND_H - (CEIL_H + topH + gap),
+      hue:'--obst-mag',
+    });
+
+  } else if (kind === 'laser') {
+    // Horizontal beam across the screen at a random height,
+    // with a warn-phase before activation so it's fair.
+    const y = rand(CEIL_H + 30, H - GROUND_H - 30);
+    state.obstacles.push({
+      kind:'laser',
+      x: W + 40,
+      y, w: 340, h: 6,
+      warn: 1.0,       // seconds of warning glow
+      active: 0,
+      cycleOn: 1.2,    // on-duration
+      cycleOff: 1.0,
+      phase: 'warn',   // 'warn' | 'on' | 'off'
+      timer: 1.0,
+      hue:'--laser',
+    });
+
+  } else if (kind === 'drift') {
+    const h = 34, w = 34;
+    state.obstacles.push({
+      kind:'drift',
+      x: W + 40,
+      y: H * 0.5 - h / 2,
+      w, h,
+      baseY: H * 0.5 - h / 2,
+      amp: rand(60, 110),
+      freq: rand(0.8, 1.6),
+      t: rand(0, Math.PI * 2),
+      hue: pickHue(),
+    });
+  }
+}
+
+// Every obstacle now shares the site's signature neon-pink (--accent-hot,
+// mirrored locally as --obst-mag = #ff4fa1). Consistent palette reads
+// better against the drone's cyan body + matches the hub's accent tone.
+function pickHue() {
+  return '--obst-mag';
+}
+
+function spawnPickup() {
+  const kinds = ['shield', 'life', 'phase', 'slow'];
+  // Shield and phase are the most useful; weight them higher
+  const weights = [3, 1, 3, 2];
+  const total   = weights.reduce((a, b) => a + b, 0);
+  let r = Math.random() * total;
+  let kind = kinds[0];
+  for (let i = 0; i < kinds.length; i++) {
+    r -= weights[i];
+    if (r <= 0) { kind = kinds[i]; break; }
+  }
+  state.pickups.push({
+    kind,
+    x: W + 30,
+    y: rand(CEIL_H + 40, H - GROUND_H - 40),
+    r: 12,
+    bob: Math.random() * Math.PI * 2,
+  });
+}
+
+// ---------- Thruster particle trail (0s and 1s) ----------
+function emitExhaust() {
+  // Emit one glyph per frame-ish (rate limited by caller).
+  const glyph = Math.random() < 0.5 ? '0' : '1';
+  const col   = Math.random() < 0.5 ? '--drone-trail' : '--drone-core';
+  state.particles.push({
+    x: PLAYER_X - 2,
+    y: state.py + PLAYER_H * 0.55,
+    vx: -rand(80, 160),
+    vy: rand(-30, 30),
+    life: 0.6,
+    max:  0.6,
+    glyph,
+    color: col,
+  });
+}
+
+// ---------- Input ----------
+const touchBtn = document.getElementById('tThrust');
+
+function setThrust(on) {
+  state.thrusting = on;
+  if (on) sfx.init(); // unlock audio on first press
+}
+document.addEventListener('keydown', (e) => {
+  if (e.code === 'Space' || e.code === 'ArrowUp') {
+    e.preventDefault();
+    if (state.mode === 'menu' || state.mode === 'gameover') {
+      startGame();
+    } else if (state.mode === 'paused') {
+      state.mode = 'playing';
+      hideOverlays();
+    } else if (state.mode === 'playing') {
+      setThrust(true);
+    }
+  } else if (e.code === 'KeyP') {
+    if (state.mode === 'playing') { state.mode = 'paused'; showOverlay('pauseScreen'); }
+    else if (state.mode === 'paused') { state.mode = 'playing'; hideOverlays(); }
+  } else if (e.code === 'KeyM') {
+    const muted = sfx.toggle();
+    document.getElementById('muteBtnMenu').textContent = muted ? '♪ SOUND OFF' : '♪ SOUND ON';
+  } else if (e.code === 'KeyR') {
+    if (state.mode === 'gameover' || state.mode === 'paused') startGame();
+  }
+});
+document.addEventListener('keyup', (e) => {
+  if (e.code === 'Space' || e.code === 'ArrowUp') setThrust(false);
+});
+
+// Pointer (mouse / touch) — hold anywhere on the stage to thrust.
+function onPointerDown(e) {
+  if (state.mode === 'menu' || state.mode === 'gameover') {
+    startGame();
+    e.preventDefault();
+    return;
+  }
+  if (state.mode === 'playing') setThrust(true);
+}
+function onPointerUp() { setThrust(false); }
+
+cvs.addEventListener('pointerdown', onPointerDown);
+cvs.addEventListener('pointerup',   onPointerUp);
+cvs.addEventListener('pointercancel', onPointerUp);
+cvs.addEventListener('pointerleave',  onPointerUp);
+// Touch button (mobile overlay)
+touchBtn.addEventListener('pointerdown', () => setThrust(true));
+touchBtn.addEventListener('pointerup',   () => setThrust(false));
+touchBtn.addEventListener('pointercancel', () => setThrust(false));
+
+// Buttons
+document.getElementById('startBtn').addEventListener('click', startGame);
+document.getElementById('retryBtn').addEventListener('click', startGame);
+document.getElementById('resumeBtn').addEventListener('click', () => {
+  state.mode = 'playing'; hideOverlays();
+});
+document.getElementById('restartBtnPause').addEventListener('click', startGame);
+document.getElementById('muteBtnMenu').addEventListener('click', () => {
+  const muted = sfx.toggle();
+  document.getElementById('muteBtnMenu').textContent = muted ? '♪ SOUND OFF' : '♪ SOUND ON';
+});
+
+// ---------- Game lifecycle ----------
+function startGame() {
+  resetState();
+  hideOverlays();
+  last = performance.now();
+}
+
+function endGame() {
+  if (state.mode === 'gameover') return;
+  state.mode = 'gameover';
+  const finalScore = Math.floor(state.score);
+  const isBest = finalScore > state.best;
+  if (isBest) {
+    state.best = finalScore;
+    localStorage.setItem('bj.best', String(finalScore));
+  }
+  document.getElementById('finalScore').textContent = pad(finalScore, 6);
+  document.getElementById('finalBest').textContent  = pad(state.best, 6);
+  document.getElementById('finalTime').textContent  = state.elapsed.toFixed(1) + 's';
+  document.getElementById('newBestMsg').style.display = isBest ? 'block' : 'none';
+  if (window.NostalgiaScores) {
+    window.NostalgiaScores.submitAndReport(
+      'byte-jet', finalScore, document.getElementById('scoreStatus')
+    );
+  }
+  showOverlay('gameoverScreen');
+  deadSfx();
+}
+
+function hit() {
+  if (state.elapsed < state.phaseUntil) return;        // phase ignores collisions
+  if (state.shield) {
+    state.shield = false;
+    hitSfx();
+    // brief invuln is built-in: phase stays false, but shield being down
+    // won't re-trigger on the same frame.
+    spawnBurst(PLAYER_X + PLAYER_W/2, state.py + PLAYER_H/2, '--shield-aura');
+    updateHUD();
+    return;
+  }
+  if (state.lives > 1) {
+    state.lives--;
+    hitSfx();
+    spawnBurst(PLAYER_X + PLAYER_W/2, state.py + PLAYER_H/2, '--drone-core');
+    // brief phase so they don't instantly die to the same obstacle
+    state.phaseUntil = state.elapsed + 1.1;
+    updateHUD();
+    return;
+  }
+  // lives drop to zero → game over
+  state.lives = 0;
+  updateHUD();
+  endGame();
+}
+
+function spawnBurst(x, y, col) {
+  for (let i = 0; i < 12; i++) {
+    const ang = Math.random() * Math.PI * 2;
+    const sp  = rand(80, 260);
+    state.particles.push({
+      x, y,
+      vx: Math.cos(ang) * sp,
+      vy: Math.sin(ang) * sp,
+      life: 0.45, max: 0.45,
+      glyph: Math.random() < 0.5 ? '0' : '1',
+      color: col,
+    });
+  }
+}
+
+// ---------- Collision ----------
+function playerRect() {
+  return { x: PLAYER_X + 2, y: state.py + 2, w: PLAYER_W - 4, h: PLAYER_H - 4 };
+}
+function rectsOverlap(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+function circleRectOverlap(cx, cy, r, rx, ry, rw, rh) {
+  const nx = clamp(cx, rx, rx + rw);
+  const ny = clamp(cy, ry, ry + rh);
+  const dx = cx - nx, dy = cy - ny;
+  return dx * dx + dy * dy < r * r;
+}
+
+// ---------- Update ----------
+function update(dt) {
+  if (state.mode !== 'playing') return;
+  state.elapsed += dt;
+
+  // World speed ramp, capped. Slow-mo scales the effective scroll.
+  const base = Math.min(SPEED_CAP, BASE_SPEED + state.elapsed * SPEED_PER_SEC);
+  const effSpeed = (state.elapsed < state.slowUntil) ? base * SLOW_FACTOR : base;
+  state.speed = base;
+
+  // Player physics
+  const acc = (state.thrusting ? -THRUST_ACC : 0) + GRAVITY;
+  state.pvy = clamp(state.pvy + acc * dt, -MAX_UP_V, MAX_DOWN_V);
+  state.py += state.pvy * dt;
+
+  // Ceiling / floor are soft rails — the player skims along them without
+  // taking damage. Only actual obstacles / active lasers deal hits.
+  if (state.py < CEIL_H) {
+    state.py = CEIL_H; state.pvy = Math.max(0, state.pvy);
+  }
+  if (state.py + PLAYER_H > H - GROUND_H) {
+    state.py = H - GROUND_H - PLAYER_H; state.pvy = Math.min(0, state.pvy);
+  }
+
+  // Emit exhaust (rate-limited): always while alive, heavier when thrusting
+  if (Math.random() < (state.thrusting ? 0.85 : 0.35)) emitExhaust();
+  if (state.thrusting && Math.random() < 0.2) thrustSfx();
+
+  // Advance obstacles
+  for (let i = state.obstacles.length - 1; i >= 0; i--) {
+    const o = state.obstacles[i];
+    o.x -= effSpeed * dt;
+
+    // Kind-specific behaviour
+    if (o.kind === 'drift') {
+      o.t += dt * o.freq;
+      o.y = o.baseY + Math.sin(o.t) * o.amp;
+    } else if (o.kind === 'laser') {
+      o.timer -= dt;
+      if (o.timer <= 0) {
+        if (o.phase === 'warn') { o.phase = 'on';  o.timer = o.cycleOn;  laserSfx(); }
+        else if (o.phase === 'on')  { o.phase = 'off'; o.timer = o.cycleOff; }
+        else                         { o.phase = 'on';  o.timer = o.cycleOn;  laserSfx(); }
+      }
+    }
+
+    // Off-screen → cull
+    if (o.x + o.w < -40) state.obstacles.splice(i, 1);
+  }
+
+  // Advance pickups
+  for (let i = state.pickups.length - 1; i >= 0; i--) {
+    const p = state.pickups[i];
+    p.x -= effSpeed * dt;
+    p.bob += dt * 2.5;
+    if (p.x + p.r < -20) state.pickups.splice(i, 1);
+  }
+
+  // Particle physics
+  for (let i = state.particles.length - 1; i >= 0; i--) {
+    const p = state.particles[i];
+    p.x += (p.vx - effSpeed * 0.15) * dt;
+    p.y += p.vy * dt;
+    p.life -= dt;
+    if (p.life <= 0) state.particles.splice(i, 1);
+  }
+
+  // Starfield drift
+  for (const s of state.stars) {
+    s.x -= effSpeed * s.z * 0.2 * dt;
+    if (s.x < -4) { s.x = W + 4; s.y = Math.random() * H; }
+  }
+
+  // Spawners
+  state.nextObstacleAt -= dt;
+  if (state.nextObstacleAt <= 0) {
+    spawnObstacle();
+    // Spawn interval tightens over time. Eased ceiling (2.2s vs the
+    // old 1.8s) gives the opening more breathing room; floor of 0.85s
+    // is slightly more relaxed than the old 0.75s.
+    const base = clamp(2.2 - state.elapsed * 0.012, 0.85, 2.2);
+    state.nextObstacleAt = base + rand(-0.15, 0.25);
+  }
+  state.nextPickupAt -= dt;
+  if (state.nextPickupAt <= 0) {
+    spawnPickup();
+    state.nextPickupAt = rand(8, 13);
+  }
+
+  // Collisions — skip if phasing
+  const phasing = state.elapsed < state.phaseUntil;
+  const pr = playerRect();
+
+  if (!phasing) {
+    for (const o of state.obstacles) {
+      if (o.kind === 'laser' && o.phase !== 'on') continue;
+      // Spike rows: shrink the hitbox horizontally so brushing the
+      // outermost spike's edge isn't an instant kill — players read
+      // the row as triangular tips, not a solid bar.
+      let hb = o;
+      if (o.kind === 'spikes') {
+        hb = { x: o.x + 2, y: o.y, w: o.w - 4, h: o.h };
+      }
+      if (rectsOverlap(pr, hb)) { hit(); break; }
+    }
+  }
+
+  // Pickup collection (always allowed)
+  for (let i = state.pickups.length - 1; i >= 0; i--) {
+    const p = state.pickups[i];
+    const yBob = p.y + Math.sin(p.bob) * 6;
+    if (circleRectOverlap(p.x, yBob, p.r, pr.x, pr.y, pr.w, pr.h)) {
+      applyPickup(p.kind);
+      pickupSfx();
+      spawnBurst(p.x, yBob, pickupColor(p.kind));
+      state.score += SCORE_PER_PICKUP;
+      state.pickups.splice(i, 1);
+    }
+  }
+
+  // Time-based score
+  state.score += SCORE_PER_SEC * dt;
+
+  updateHUD();
+}
+
+function pickupColor(kind) {
+  return kind === 'shield' ? '--shield-aura' :
+         kind === 'life'   ? '--life-orb'    :
+         kind === 'phase'  ? '--phase-orb'   :
+                             '--slow-orb';
+}
+
+function applyPickup(kind) {
+  if (kind === 'shield') { state.shield = true; }
+  else if (kind === 'life') { state.lives = Math.min(LIVES_MAX, state.lives + 1); }
+  else if (kind === 'phase') { state.phaseUntil = state.elapsed + PHASE_DUR; }
+  else if (kind === 'slow')  { state.slowUntil  = state.elapsed + SLOW_DUR;  }
+}
+
+// ---------- Render ----------
+function render() {
+  // Deep bg wash — arcade.css grid shows through via stage container,
+  // we draw into the canvas only.
+  ctx.fillStyle = color('--bg-deep');
+  ctx.fillRect(0, 0, W, H);
+
+  // Parallax stars
+  for (const s of state.stars) {
+    ctx.globalAlpha = 0.35 + s.z * 0.45;
+    ctx.fillStyle = color('--star');
+    ctx.fillRect(Math.floor(s.x), Math.floor(s.y), s.s, s.s);
+  }
+  ctx.globalAlpha = 1;
+
+  // Ceiling + ground bars (data edges)
+  drawScanBar(0, 0, W, CEIL_H);
+  drawScanBar(0, H - GROUND_H, W, GROUND_H);
+
+  // Particles (behind drone)
+  ctx.font = "9px 'JetBrains Mono', monospace";
+  ctx.textBaseline = 'top';
+  for (const p of state.particles) {
+    ctx.globalAlpha = Math.max(0, p.life / p.max);
+    ctx.fillStyle = color(p.color);
+    ctx.fillText(p.glyph, p.x, p.y);
+  }
+  ctx.globalAlpha = 1;
+
+  // Obstacles
+  for (const o of state.obstacles) {
+    if (o.kind === 'laser')       drawLaser(o);
+    else if (o.kind === 'spikes') drawSpikes(o);
+    else                          drawObstacleBlock(o);
+  }
+
+  // Pickups
+  for (const p of state.pickups) drawPickup(p);
+
+  // Player drone
+  drawDrone(PLAYER_X, state.py);
+
+  // HUD overlay stripes — subtle scanline inside canvas
+  ctx.globalAlpha = 0.06;
+  ctx.fillStyle = '#ffffff';
+  for (let y = 0; y < H; y += 3) ctx.fillRect(0, y, W, 1);
+  ctx.globalAlpha = 1;
+}
+
+function drawScanBar(x, y, w, h) {
+  const c = color('--border');
+  ctx.fillStyle = c;
+  ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = color('--accent-2');
+  ctx.globalAlpha = 0.3;
+  // "data tick" stripes
+  for (let i = 0; i < w; i += 24) {
+    ctx.fillRect(x + i, y + h / 2, 10, 1);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawObstacleBlock(o) {
+  const hue = color(o.hue || '--obst-mag');
+  // Solid neon-pink body — reads instantly as a hazard against the dark
+  // backdrop. A slightly darker inner panel adds depth without the washy
+  // look of a low-alpha fill. Cross-ticks give just enough texture to
+  // hint at "data block" without getting busy.
+  ctx.fillStyle = hue;
+  ctx.fillRect(o.x, o.y, o.w, o.h);
+
+  // Inner inset panel — same hue, multiply-style darken via composite.
+  // Simpler (and compatible with our fake ctx in tests) is to just draw
+  // a semi-transparent black inset.
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.fillRect(o.x + 3, o.y + 3, o.w - 6, o.h - 6);
+
+  // Bright edge highlight along top + left for a pixel-plated look
+  ctx.fillStyle = hue;
+  ctx.fillRect(o.x, o.y, o.w, 2);          // top edge
+  ctx.fillRect(o.x, o.y, 2, o.h);          // left edge
+
+  // Inner cross-ticks (data-line hatching)
+  ctx.globalAlpha = 0.55;
+  for (let y = o.y + 8; y < o.y + o.h - 6; y += 10) {
+    ctx.fillRect(o.x + 5, y, o.w - 10, 1);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// Row of triangular spikes. `count` of 14-px-wide spikes with 2-px
+// gaps; pointing up when on the floor, down when hanging from the
+// ceiling. Drawn with a bright tip cap so the threat reads at speed.
+function drawSpikes(o) {
+  const SPIKE_W = 14, GAP = 2;
+  const hue = color(o.hue || '--obst-mag');
+  for (let i = 0; i < o.count; i++) {
+    const sx = o.x + i * (SPIKE_W + GAP);
+    ctx.fillStyle = hue;
+    ctx.beginPath();
+    if (o.onCeiling) {
+      ctx.moveTo(sx,             o.y);
+      ctx.lineTo(sx + SPIKE_W,   o.y);
+      ctx.lineTo(sx + SPIKE_W/2, o.y + o.h);
+    } else {
+      ctx.moveTo(sx,             o.y + o.h);
+      ctx.lineTo(sx + SPIKE_W,   o.y + o.h);
+      ctx.lineTo(sx + SPIKE_W/2, o.y);
+    }
+    ctx.closePath();
+    ctx.fill();
+    // Bright tip
+    ctx.fillStyle = '#ffffff';
+    ctx.globalAlpha = 0.75;
+    if (o.onCeiling) {
+      ctx.fillRect(sx + SPIKE_W/2 - 1, o.y + o.h - 4, 2, 4);
+    } else {
+      ctx.fillRect(sx + SPIKE_W/2 - 1, o.y, 2, 4);
+    }
+    ctx.globalAlpha = 1;
+  }
+  // Subtle base rail to anchor the row visually
+  ctx.fillStyle = hue;
+  ctx.globalAlpha = 0.55;
+  if (o.onCeiling) {
+    ctx.fillRect(o.x - 2, o.y - 1, o.w + 4, 1);
+  } else {
+    ctx.fillRect(o.x - 2, o.y + o.h, o.w + 4, 1);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawLaser(o) {
+  const hueActive = color(o.hue || '--laser');
+  const hueWarn   = color('--laser-warn');
+  if (o.phase === 'warn') {
+    // Dashed warn line, pulsing
+    const pulse = 0.4 + Math.sin(state.elapsed * 22) * 0.3;
+    ctx.globalAlpha = pulse;
+    ctx.fillStyle = hueWarn;
+    for (let x = o.x; x < o.x + o.w; x += 10) ctx.fillRect(x, o.y + 2, 5, 2);
+    ctx.globalAlpha = 1;
+  } else if (o.phase === 'on') {
+    // Solid beam with glow band
+    ctx.fillStyle = hueActive;
+    ctx.globalAlpha = 0.35;
+    ctx.fillRect(o.x, o.y - 4, o.w, o.h + 8);
+    ctx.globalAlpha = 1;
+    ctx.fillRect(o.x, o.y, o.w, o.h);
+  } else {
+    // 'off' — faint residue so the player knows it'll come back
+    ctx.globalAlpha = 0.15;
+    ctx.fillStyle = hueActive;
+    ctx.fillRect(o.x, o.y + o.h / 2 - 1, o.w, 2);
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawPickup(p) {
+  const yBob = p.y + Math.sin(p.bob) * 6;
+  const col  = color(pickupColor(p.kind));
+  // aura
+  ctx.globalAlpha = 0.25 + Math.sin(p.bob * 2) * 0.15;
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.arc(p.x, yBob, p.r + 6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  // core
+  ctx.strokeStyle = col;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(p.x, yBob, p.r, 0, Math.PI * 2);
+  ctx.stroke();
+  // glyph inside
+  ctx.fillStyle = col;
+  ctx.font = "10px 'Press Start 2P', monospace";
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const glyph =
+    p.kind === 'shield' ? 'S' :
+    p.kind === 'life'   ? '♥' :
+    p.kind === 'phase'  ? 'P' : 'T';
+  ctx.fillText(glyph, p.x, yBob + 1);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+}
+
+function drawDrone(x, y) {
+  // Phasing: translucent
+  const phasing = state.elapsed < state.phaseUntil;
+  const alpha = phasing ? 0.5 + Math.sin(state.elapsed * 18) * 0.15 : 1;
+  ctx.globalAlpha = alpha;
+
+  // Body — chevron
+  const body = color('--drone');
+  const core = color('--drone-core');
+
+  ctx.fillStyle = body;
+  // main hull
+  ctx.fillRect(x + 6, y + 4, PLAYER_W - 12, PLAYER_H - 8);
+  // nose
+  ctx.beginPath();
+  ctx.moveTo(x + PLAYER_W - 6, y + 4);
+  ctx.lineTo(x + PLAYER_W,     y + PLAYER_H / 2);
+  ctx.lineTo(x + PLAYER_W - 6, y + PLAYER_H - 4);
+  ctx.closePath();
+  ctx.fill();
+  // tail fins
+  ctx.fillRect(x, y + 2, 6, 4);
+  ctx.fillRect(x, y + PLAYER_H - 6, 6, 4);
+
+  // core light
+  ctx.fillStyle = core;
+  ctx.fillRect(x + 12, y + PLAYER_H / 2 - 2, 8, 4);
+
+  // shield aura
+  if (state.shield) {
+    ctx.strokeStyle = color('--shield-aura');
+    ctx.lineWidth = 2;
+    ctx.globalAlpha = 0.6 * alpha + Math.sin(state.elapsed * 10) * 0.2;
+    ctx.strokeRect(x - 3, y - 3, PLAYER_W + 6, PLAYER_H + 6);
+    ctx.globalAlpha = alpha;
+  }
+
+  // thrust flame when boosting (short line segment behind)
+  if (state.thrusting && state.mode === 'playing') {
+    ctx.fillStyle = color('--drone-trail');
+    ctx.globalAlpha = alpha * 0.9;
+    ctx.fillRect(x - 6, y + PLAYER_H / 2 - 2, 4, 4);
+    ctx.fillRect(x - 12, y + PLAYER_H / 2 - 1, 4, 2);
+  }
+
+  ctx.globalAlpha = 1;
+}
+
+// ---------- Main loop ----------
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  update(dt);
+  render();
+  requestAnimationFrame(frame);
+}
+
+// Kick off: show the start overlay, seed stars, wait for input.
+resetState();
+state.mode = 'menu';
+seedStars();
+showOverlay('startScreen');
+updateHUD();
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

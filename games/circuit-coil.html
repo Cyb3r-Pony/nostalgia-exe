@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<!-- Discourage browser caching so edits to this file are picked up on reload. -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
+<title>CIRCUIT COIL — Nostalgia.exe</title>
+<link rel="icon" type="image/svg+xml" href="../favicon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=Press+Start+2P&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="shared/arcade.css" />
+<style>
+  /* ==========================================================
+     CIRCUIT COIL — game-specific overrides.
+     Shared chrome comes from shared/arcade.css.
+     Snake body is a flowing neon data stream.
+     ========================================================== */
+  :root {
+    --coil-head:   #4ff4ff;   /* cyan — head of the data stream */
+    --coil-body:   #5ff07a;   /* electric green — body packets  */
+    --coil-tail:   #4ea5ff;   /* blue — fading tail             */
+    --core:        #ff4fa1;   /* magenta — collectible data core */
+    --core-ring:   #ffcc33;   /* amber ring pulse               */
+    --playfield-bg: #0b0b15;
+    --playfield-line: rgba(78, 165, 255, 0.08);
+    --panel-inner:  #14141e;
+    --panel-stroke: #2a2a3a;
+    --glow:         #00e5ff;
+  }
+  [data-theme="light"] {
+    --coil-head:   #1ba5b2;
+    --coil-body:   #2e9a4a;
+    --coil-tail:   #2c6ec8;
+    --core:        #c8388a;
+    --core-ring:   #c68a00;
+    --playfield-bg: #f1e8ce;
+    --playfield-line: rgba(26,26,40,0.08);
+    --panel-inner:  #f7eeda;
+    --panel-stroke: #a59c7e;
+    --glow:        #1aa5cc;
+  }
+
+  canvas { max-width: 100%; max-height: 100%; image-rendering: pixelated; }
+
+  /* Start / gameover splash table.
+     Two columns: description (flex) on the LEFT, key capsule(s) on the RIGHT.
+     Special first row: ← / → share a single row with the description
+     "move up / down / left / right" centred *underneath* the arrow cluster. */
+  .controls-grid {
+    display: grid;
+    grid-template-columns: 1fr max-content;
+    align-items: center;
+    gap: 8px 18px;
+    margin: 14px 0 18px;
+    text-align: left;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .controls-grid .move-row {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+  }
+  .controls-grid .move-keys {
+    display: inline-flex;
+    gap: 10px;
+  }
+  .controls-grid .move-desc {
+    text-align: center;
+    color: var(--text);
+    opacity: 0.9;
+  }
+  .controls-grid .keys-cell {
+    display: inline-flex;
+    gap: 6px;
+    justify-content: flex-end;
+    align-items: center;
+  }
+  .controls-grid kbd {
+    display: inline-block;
+    background: var(--panel-2);
+    border: 1px solid var(--text);
+    padding: 2px 10px;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 9px;
+    min-width: 48px;
+    text-align: center;
+    line-height: 1.4;
+  }
+  .controls-grid .desc { color: var(--text); opacity: 0.9; }
+
+  /* Mode selector on the start screen */
+  .mode-row {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin: 4px 0 14px;
+  }
+  .mode-row .mode-btn {
+    flex: 1 1 auto;
+    padding: 10px 14px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'Press Start 2P', monospace;
+    font-size: 10px;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .mode-row .mode-btn:hover {
+    border-color: var(--accent-2);
+    color: var(--accent-2);
+  }
+  .mode-row .mode-btn.active {
+    border-color: var(--accent-2);
+    color: var(--accent-2);
+    box-shadow: 0 0 12px color-mix(in srgb, var(--accent-2) 40%, transparent);
+  }
+  .mode-hint {
+    font-size: 10px;
+    text-align: center;
+    opacity: 0.7;
+    margin-bottom: 10px;
+    min-height: 1.2em;
+  }
+</style>
+</head>
+<body>
+
+<div class="bg-grid"></div>
+<div class="scanlines"></div>
+
+<header class="topbar">
+  <a href="../index.html" class="back">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    EXIT
+  </a>
+  <div class="title-tag">CIRCUIT COIL<span class="ver">v1.0.0 // COIL.EXE</span></div>
+  <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme"></button>
+</header>
+
+<section class="hud" id="hud">
+  <div class="hud-col">
+    <div class="hud-stat score">SCORE<strong id="hudScore">000000</strong></div>
+    <div class="hud-stat">LENGTH<strong id="hudLength">003</strong></div>
+  </div>
+  <div class="hud-col">
+    <div class="hud-stat">SPEED<strong id="hudSpeed">01</strong></div>
+    <div class="hud-stat best">BEST<strong id="hudBest">000000</strong></div>
+  </div>
+</section>
+
+<div class="stage">
+  <canvas id="game" width="620" height="620"></canvas>
+</div>
+
+<footer class="bottombar">
+  <div class="keys">
+    <span><kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> STEER</span>
+    <span><kbd>WASD</kbd> ALT</span>
+    <span><kbd>P</kbd> PAUSE</span>
+    <span><kbd>M</kbd> MUTE</span>
+    <span><kbd>R</kbd> RESTART</span>
+  </div>
+  <div>© NOSTALGIA.EXE — <span class="blink">█</span></div>
+</footer>
+
+<div class="touch" id="touch">
+  <div class="right-cluster">
+    <button id="tUp"    aria-label="Up">▲</button>
+  </div>
+  <div class="right-cluster">
+    <button id="tLeft"  aria-label="Left">◀</button>
+    <button id="tDown"  aria-label="Down">▼</button>
+    <button id="tRight" aria-label="Right">▶</button>
+  </div>
+</div>
+
+<!-- Start menu -->
+<div class="overlay" id="startScreen">
+  <div class="card">
+    <div class="card-head">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span>circuit_coil.app</span>
+      <span>_ □ ×</span>
+    </div>
+    <h1>CIRCUIT COIL</h1>
+    <p>A data stream threads the quantum grid. Collect cores to extend your signal — but every packet you absorb coils tighter around you.</p>
+
+    <div class="mode-row">
+      <button class="mode-btn active" data-mode="walls" id="modeWalls">▤ FIREWALL</button>
+      <button class="mode-btn"        data-mode="wrap"  id="modeWrap">∞ WRAP</button>
+    </div>
+    <div class="mode-hint" id="modeHint">Walls end the run. Collide with the border → signal lost.</div>
+
+    <div class="controls-grid">
+      <!-- Row 1: arrow cluster with centered description beneath -->
+      <div class="move-row">
+        <div class="move-keys"><kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd></div>
+        <div class="move-desc">steer the data stream</div>
+      </div>
+      <!-- Remaining rows: description (left) + key capsule(s) (right) -->
+      <span class="desc">alternate keys (WASD)</span>
+      <span class="keys-cell"><kbd>W A S D</kbd></span>
+      <span class="desc">pause run</span>
+      <span class="keys-cell"><kbd>P</kbd></span>
+      <span class="desc">mute audio</span>
+      <span class="keys-cell"><kbd>M</kbd></span>
+      <span class="desc">restart run</span>
+      <span class="keys-cell"><kbd>R</kbd></span>
+    </div>
+
+    <button class="btn" id="startBtn">▶ START RUN</button>
+    <button class="btn ghost" id="muteBtnMenu">♪ SOUND ON</button>
+  </div>
+</div>
+
+<!-- Pause -->
+<div class="overlay hidden" id="pauseScreen">
+  <div class="card">
+    <div class="card-head">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span>pause.sys</span>
+      <span>_ □ ×</span>
+    </div>
+    <h2>PAUSED</h2>
+    <p>The stream holds steady.</p>
+    <button class="btn" id="resumeBtn">▶ RESUME</button>
+    <button class="btn ghost" id="restartBtnPause">↻ RESTART</button>
+  </div>
+</div>
+
+<!-- Game over -->
+<div class="overlay hidden" id="gameoverScreen">
+  <div class="card">
+    <div class="card-head">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span>signal_lost.log</span>
+      <span>_ □ ×</span>
+    </div>
+    <h2 style="color:var(--accent-hot)">SIGNAL LOST</h2>
+    <p id="gameoverMsg">The data stream crossed itself. Integrity check failed.</p>
+    <div class="stat-row">
+      <div>SCORE<strong id="finalScore">000000</strong></div>
+      <div>LENGTH<strong id="finalLength">003</strong></div>
+      <div>SPEED<strong id="finalSpeed">01</strong></div>
+      <div>BEST<strong id="finalBest">000000</strong></div>
+    </div>
+    <p id="newBestMsg" style="color:var(--accent-2);margin:4px 0 16px;display:none">✦ NEW BEST ✦</p>
+    <p id="scoreStatus" class="score-status" data-state="idle"></p>
+    <button class="btn" id="retryBtn">↻ RUN AGAIN</button>
+    <a href="../index.html" class="btn ghost">◀ EXIT</a>
+  </div>
+</div>
+
+<!-- Public scoreboard plumbing (must load BEFORE the inline game script).
+     All four are no-ops on their own if Supabase isn't configured. -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.105.1"></script>
+<script src="../shared/supabase-config.js"></script>
+<script src="../shared/auth.js"></script>
+<script src="../shared/scores.js"></script>
+
+<script src="shared/arcade.js"></script>
+<script>
+/* =============================================================
+   CIRCUIT COIL — a neon-data-stream Snake.
+   Grid-step movement, item collection grows the stream, speed
+   ramps up with score, two modes: FIREWALL (walls end the run)
+   and WRAP (edges wrap around). Self-collision always ends.
+   ============================================================= */
+
+(() => {
+const cvs = document.getElementById('game');
+const ctx = cvs.getContext('2d');
+const W = cvs.width, H = cvs.height;
+
+// ---------- Shared utilities ----------
+const { clamp, rand, randInt, pad, color, createAudio, createOverlayManager,
+        wireThemeToggle, fitCanvas } = Arcade;
+const css = color;
+
+wireThemeToggle('themeToggle');
+
+const audio = createAudio('cc.muted');
+const initAudio = audio.init;
+const beep  = audio.beep;
+const noise = audio.noise;
+const sfx = {
+  turn:    () => beep(300, 0.02, 'square',   0.05, 360),
+  eat:     () => { beep(520, 0.06, 'square',   0.10, 820);
+                   setTimeout(() => beep(780, 0.08, 'triangle', 0.09, 980), 50); },
+  speedup: () => { beep(660, 0.08, 'triangle', 0.12, 1100);
+                   setTimeout(() => beep(990, 0.10, 'triangle', 0.11, 1440), 100); },
+  pause:   () => beep(300, 0.05, 'triangle', 0.08, 220),
+  death:   () => { beep(440, 0.18, 'square', 0.14, 160);
+                   setTimeout(() => beep(220, 0.24, 'square', 0.14, 80), 180);
+                   setTimeout(() => noise(0.12, 0.12), 280); },
+};
+
+// ---------- Playfield geometry ----------
+// A square grid makes collisions feel fair. 30x30 @ 20px = 600px of
+// playfield with 10px margin, centered in the 620-px canvas.
+const COLS  = 30;
+const ROWS  = 30;
+const CELL  = 20;
+const FIELD_W = COLS * CELL;  // 600
+const FIELD_H = ROWS * CELL;  // 600
+const FIELD_X = Math.floor((W - FIELD_W) / 2);  // 10
+const FIELD_Y = Math.floor((H - FIELD_H) / 2);  // 10
+
+// ---------- Direction helpers ----------
+const DIR = {
+  up:    { x:  0, y: -1, name: 'up'    },
+  down:  { x:  0, y:  1, name: 'down'  },
+  left:  { x: -1, y:  0, name: 'left'  },
+  right: { x:  1, y:  0, name: 'right' },
+};
+function opposite(a, b) {
+  return a.x === -b.x && a.y === -b.y;
+}
+
+// ---------- Speed curve ----------
+// Move every N ms, decreasing as length grows. The floor keeps the
+// game playable even on monstrously long coils.
+function stepMs(length) {
+  // length starts at 3, each eat adds 1.
+  // Base 140ms → 60ms floor. Tuned so the first few eats feel breezy
+  // and the mid-game starts demanding planning.
+  const eats = Math.max(0, length - 3);
+  const ms = 140 - eats * 4;
+  return Math.max(60, ms);
+}
+// Derived "speed level" just for the HUD readout.
+function speedLevel(length) {
+  return Math.min(20, 1 + Math.floor(Math.max(0, length - 3) / 3));
+}
+
+// ---------- Game state ----------
+function initialSnake() {
+  // Three segments at the grid center, facing right.
+  // Head is at index 0.
+  const cx = Math.floor(COLS / 2);
+  const cy = Math.floor(ROWS / 2);
+  return [
+    { x: cx,     y: cy },
+    { x: cx - 1, y: cy },
+    { x: cx - 2, y: cy },
+  ];
+}
+
+const state = {
+  phase: 'menu',             // 'menu' | 'playing' | 'paused' | 'gameover'
+  mode: 'walls',             // 'walls' | 'wrap'
+  snake: initialSnake(),     // array, snake[0] is head
+  dir: DIR.right,            // current direction
+  queuedDir: null,           // direction scheduled for next step
+  core: null,                // { x, y } — the collectible
+  score: 0,
+  best: parseInt(localStorage.getItem('cc.best') || '0'),
+  stepTimer: 0,              // ms accumulator
+  pulse: 0,                  // ms — for core glow animation
+  shake: 0,                  // ms — screen shake on death
+  deathCause: 'self',        // 'self' | 'wall' — for game-over message
+  lastSpeedLevel: 1,         // so we only SFX-ding on level-up
+};
+
+// Ensure the core is placed on a free cell.
+function placeCore() {
+  // Build an occupancy set of the snake body.
+  const occupied = new Set();
+  for (const s of state.snake) occupied.add(s.y * COLS + s.x);
+  // Collect every free cell and pick at random. 900 cells max so this
+  // stays cheap even at very long lengths.
+  const free = [];
+  for (let y = 0; y < ROWS; y++) {
+    for (let x = 0; x < COLS; x++) {
+      if (!occupied.has(y * COLS + x)) free.push({ x, y });
+    }
+  }
+  if (free.length === 0) {
+    // Technically a win — the grid is full. End the run gracefully.
+    state.core = null;
+    state.deathCause = 'win';
+    endGame();
+    return;
+  }
+  state.core = free[randInt(0, free.length - 1)];
+}
+
+function resetRun() {
+  state.snake = initialSnake();
+  state.dir = DIR.right;
+  state.queuedDir = null;
+  state.score = 0;
+  state.stepTimer = 0;
+  state.pulse = 0;
+  state.shake = 0;
+  state.deathCause = 'self';
+  state.lastSpeedLevel = 1;
+  placeCore();
+  updateHUD();
+}
+
+// ---------- Overlay manager ----------
+const overlays = createOverlayManager(['startScreen', 'pauseScreen', 'gameoverScreen']);
+
+function startGame() {
+  resetRun();
+  state.phase = 'playing';
+  overlays.hideAll();
+  initAudio();
+}
+
+function pauseGame() {
+  if (state.phase !== 'playing') return;
+  state.phase = 'paused';
+  overlays.show('pauseScreen');
+  sfx.pause();
+}
+function resumeGame() {
+  if (state.phase !== 'paused') return;
+  state.phase = 'playing';
+  overlays.hideAll();
+}
+
+function endGame() {
+  state.phase = 'gameover';
+  state.shake = 220;
+  sfx.death();
+
+  const length = state.snake.length;
+  const level  = speedLevel(length);
+  const isBest = state.score > state.best;
+  if (isBest) {
+    state.best = state.score;
+    localStorage.setItem('cc.best', String(state.best));
+  }
+  document.getElementById('finalScore').textContent  = pad(state.score, 6);
+  document.getElementById('finalLength').textContent = pad(length, 3);
+  document.getElementById('finalSpeed').textContent  = pad(level, 2);
+  document.getElementById('finalBest').textContent   = pad(state.best, 6);
+  document.getElementById('newBestMsg').style.display = isBest ? '' : 'none';
+
+  // Post to the public scoreboard (fire-and-forget, non-blocking).
+  // The helper updates #scoreStatus with the outcome; if scores.js
+  // didn't load (e.g. Supabase offline), this is a silent no-op.
+  if (window.NostalgiaScores) {
+    window.NostalgiaScores.submitAndReport(
+      'circuit-coil', state.score, document.getElementById('scoreStatus')
+    );
+  }
+
+  const msg = state.deathCause === 'wall'
+    ? 'The stream hit the firewall. Packet dropped.'
+    : state.deathCause === 'win'
+      ? 'Grid fully colonised — you compiled the perfect coil.'
+      : 'The data stream crossed itself. Integrity check failed.';
+  document.getElementById('gameoverMsg').textContent = msg;
+
+  // Delay the overlay slightly so the death shake is visible.
+  setTimeout(() => overlays.show('gameoverScreen'), 360);
+}
+
+// ---------- Input ----------
+// Queue the next direction rather than applying it immediately, so
+// pressing two keys in a single step can't chain into a reversal.
+function queueDir(d) {
+  if (state.phase !== 'playing') return;
+  // Can't reverse directly into your own neck.
+  if (opposite(d, state.dir)) return;
+  // Can't queue a no-op either.
+  if (d.x === state.dir.x && d.y === state.dir.y) return;
+  // If a queued dir was already the opposite of d, overwrite freely.
+  state.queuedDir = d;
+}
+
+window.addEventListener('keydown', (e) => {
+  const k = e.key;
+  // Direction keys
+  if (k === 'ArrowUp'    || k === 'w' || k === 'W') { queueDir(DIR.up);    e.preventDefault(); return; }
+  if (k === 'ArrowDown'  || k === 's' || k === 'S') { queueDir(DIR.down);  e.preventDefault(); return; }
+  if (k === 'ArrowLeft'  || k === 'a' || k === 'A') { queueDir(DIR.left);  e.preventDefault(); return; }
+  if (k === 'ArrowRight' || k === 'd' || k === 'D') { queueDir(DIR.right); e.preventDefault(); return; }
+  // System keys
+  if (k === 'p' || k === 'P') {
+    if (state.phase === 'playing') pauseGame();
+    else if (state.phase === 'paused') resumeGame();
+  }
+  if (k === 'm' || k === 'M') {
+    audio.toggle();
+    updateMuteButton();
+  }
+  if (k === 'r' || k === 'R') {
+    if (state.phase === 'playing' || state.phase === 'paused' || state.phase === 'gameover') {
+      startGame();
+    }
+  }
+});
+
+// ---------- Touch buttons ----------
+function bindTouch(id, fn) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const handler = (e) => { e.preventDefault(); fn(); };
+  el.addEventListener('touchstart', handler, { passive: false });
+  el.addEventListener('click', handler);
+}
+bindTouch('tUp',    () => queueDir(DIR.up));
+bindTouch('tDown',  () => queueDir(DIR.down));
+bindTouch('tLeft',  () => queueDir(DIR.left));
+bindTouch('tRight', () => queueDir(DIR.right));
+
+// Swipe-to-steer on the canvas itself for tablets / phones.
+let swipeStart = null;
+cvs.addEventListener('touchstart', (e) => {
+  const t = e.changedTouches[0];
+  swipeStart = { x: t.clientX, y: t.clientY };
+}, { passive: true });
+cvs.addEventListener('touchend', (e) => {
+  if (!swipeStart) return;
+  const t = e.changedTouches[0];
+  const dx = t.clientX - swipeStart.x;
+  const dy = t.clientY - swipeStart.y;
+  swipeStart = null;
+  if (Math.abs(dx) < 18 && Math.abs(dy) < 18) return; // ignore taps
+  if (Math.abs(dx) > Math.abs(dy)) {
+    queueDir(dx > 0 ? DIR.right : DIR.left);
+  } else {
+    queueDir(dy > 0 ? DIR.down : DIR.up);
+  }
+}, { passive: true });
+
+// ---------- Menu wiring ----------
+document.getElementById('startBtn').addEventListener('click', () => {
+  startGame();
+});
+document.getElementById('resumeBtn').addEventListener('click', resumeGame);
+document.getElementById('restartBtnPause').addEventListener('click', startGame);
+document.getElementById('retryBtn').addEventListener('click', startGame);
+
+const muteBtnMenu = document.getElementById('muteBtnMenu');
+function updateMuteButton() {
+  muteBtnMenu.textContent = audio.muted ? '♪ SOUND OFF' : '♪ SOUND ON';
+}
+muteBtnMenu.addEventListener('click', () => {
+  audio.toggle();
+  updateMuteButton();
+});
+updateMuteButton();
+
+// Mode selector on the start screen.
+const modeBtns = document.querySelectorAll('.mode-btn');
+const modeHint = document.getElementById('modeHint');
+function setMode(m) {
+  state.mode = m;
+  modeBtns.forEach(b => b.classList.toggle('active', b.dataset.mode === m));
+  modeHint.textContent = m === 'wrap'
+    ? 'Edges wrap around. Self-collision is still fatal.'
+    : 'Walls end the run. Collide with the border → signal lost.';
+}
+modeBtns.forEach(b => {
+  b.addEventListener('click', () => setMode(b.dataset.mode));
+});
+setMode('walls');
+
+// ---------- Step logic ----------
+function stepSnake() {
+  // Apply any queued direction at step boundary (avoids reverse-chains).
+  if (state.queuedDir) {
+    // Double-check against the current head (not queued-over) direction.
+    if (!opposite(state.queuedDir, state.dir)) {
+      if (state.queuedDir.x !== state.dir.x || state.queuedDir.y !== state.dir.y) {
+        state.dir = state.queuedDir;
+        sfx.turn();
+      }
+    }
+    state.queuedDir = null;
+  }
+
+  const head = state.snake[0];
+  let nx = head.x + state.dir.x;
+  let ny = head.y + state.dir.y;
+
+  // Wall handling
+  if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) {
+    if (state.mode === 'wrap') {
+      nx = (nx + COLS) % COLS;
+      ny = (ny + ROWS) % ROWS;
+    } else {
+      state.deathCause = 'wall';
+      endGame();
+      return;
+    }
+  }
+
+  // Determine if we'll eat this step.
+  const eating = state.core && nx === state.core.x && ny === state.core.y;
+
+  // Self-collision check: the tail cell will vacate unless we eat.
+  // So compare the new head against everything except the last segment
+  // when not eating; against the full body when eating.
+  const bodyEnd = eating ? state.snake.length : state.snake.length - 1;
+  for (let i = 0; i < bodyEnd; i++) {
+    const s = state.snake[i];
+    if (s.x === nx && s.y === ny) {
+      state.deathCause = 'self';
+      endGame();
+      return;
+    }
+  }
+
+  // Grow: unshift new head, pop tail only if not eating.
+  state.snake.unshift({ x: nx, y: ny });
+  if (!eating) state.snake.pop();
+
+  if (eating) {
+    // Score scales with current length to reward longer coils slightly.
+    const gain = 10 + Math.floor(state.snake.length / 5) * 2;
+    state.score += gain;
+    sfx.eat();
+    placeCore();
+    // Speed-up SFX when the speed level just bumped.
+    const lvl = speedLevel(state.snake.length);
+    if (lvl > state.lastSpeedLevel) {
+      sfx.speedup();
+      state.lastSpeedLevel = lvl;
+    }
+    updateHUD();
+  }
+}
+
+// ---------- HUD ----------
+function updateHUD() {
+  document.getElementById('hudScore').textContent  = pad(state.score, 6);
+  document.getElementById('hudLength').textContent = pad(state.snake.length, 3);
+  document.getElementById('hudSpeed').textContent  = pad(speedLevel(state.snake.length), 2);
+  document.getElementById('hudBest').textContent   = pad(state.best, 6);
+}
+updateHUD();
+
+// ---------- Rendering ----------
+function drawBackground() {
+  // Outer background — the canvas fill outside the playfield.
+  ctx.fillStyle = css('--bg');
+  ctx.fillRect(0, 0, W, H);
+
+  // Playfield panel.
+  ctx.fillStyle = css('--playfield-bg');
+  ctx.fillRect(FIELD_X, FIELD_Y, FIELD_W, FIELD_H);
+
+  // Faint subdivision grid for that retro-terminal feel. Kept subtle
+  // so the neon body reads clearly on top of it.
+  ctx.strokeStyle = css('--playfield-line');
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let c = 1; c < COLS; c++) {
+    const x = FIELD_X + c * CELL + 0.5;
+    ctx.moveTo(x, FIELD_Y);
+    ctx.lineTo(x, FIELD_Y + FIELD_H);
+  }
+  for (let r = 1; r < ROWS; r++) {
+    const y = FIELD_Y + r * CELL + 0.5;
+    ctx.moveTo(FIELD_X,           y);
+    ctx.lineTo(FIELD_X + FIELD_W, y);
+  }
+  ctx.stroke();
+
+  // Border — walls mode shows a solid accent, wrap mode shows dashed.
+  ctx.save();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = state.mode === 'wrap' ? css('--accent-3') : css('--accent-2');
+  if (state.mode === 'wrap') ctx.setLineDash([6, 4]);
+  ctx.strokeRect(FIELD_X + 1, FIELD_Y + 1, FIELD_W - 2, FIELD_H - 2);
+  ctx.restore();
+}
+
+function drawCore() {
+  if (!state.core) return;
+  const cx = FIELD_X + state.core.x * CELL + CELL / 2;
+  const cy = FIELD_Y + state.core.y * CELL + CELL / 2;
+  // Pulse animates on a sine curve (pulse counter is ms).
+  const phase = state.pulse / 500;
+  const pulseScale = 1 + Math.sin(phase * Math.PI * 2) * 0.12;
+  const r = (CELL * 0.32) * pulseScale;
+
+  // Outer glow ring.
+  ctx.save();
+  ctx.shadowBlur  = 18;
+  ctx.shadowColor = css('--core');
+  ctx.strokeStyle = css('--core-ring');
+  ctx.lineWidth   = 2;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r + 4, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Core orb.
+  ctx.fillStyle = css('--core');
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Inner highlight — tiny white dot off-center to sell the orb feel.
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.beginPath();
+  ctx.arc(cx - r * 0.25, cy - r * 0.25, r * 0.22, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawSnake() {
+  const n = state.snake.length;
+  if (n === 0) return;
+
+  // Pre-compute colors so we're not calling css() every segment.
+  const head = css('--coil-head');
+  const body = css('--coil-body');
+  const tail = css('--coil-tail');
+
+  // Draw body first (back to front), so the head ends up on top.
+  // Use a simple 3-stop interpolation (head→body→tail) along the length.
+  for (let i = n - 1; i >= 0; i--) {
+    const seg = state.snake[i];
+    const x = FIELD_X + seg.x * CELL;
+    const y = FIELD_Y + seg.y * CELL;
+
+    // Interpolation factor 0 (head) .. 1 (tail-end)
+    const t = n > 1 ? i / (n - 1) : 0;
+    let fill;
+    if (i === 0) {
+      fill = head;
+    } else if (t < 0.55) {
+      fill = body;
+    } else {
+      fill = tail;
+    }
+
+    // Subtle glow — head has the strongest glow.
+    ctx.save();
+    if (i === 0) {
+      ctx.shadowBlur  = 14;
+      ctx.shadowColor = head;
+    } else {
+      ctx.shadowBlur  = 6;
+      ctx.shadowColor = fill;
+    }
+    ctx.fillStyle = fill;
+    // Inset by 1px so the grid lines peek through between packets.
+    ctx.fillRect(x + 1, y + 1, CELL - 2, CELL - 2);
+
+    // Inner highlight for that "packet" feel.
+    ctx.shadowBlur = 0;
+    ctx.fillStyle  = 'rgba(255,255,255,0.18)';
+    ctx.fillRect(x + 2, y + 2, CELL - 4, 2);
+    ctx.restore();
+  }
+
+  // Head "eye" — a small indicator in the direction of travel so the
+  // player always knows where the stream is heading after a turn.
+  const h = state.snake[0];
+  const hx = FIELD_X + h.x * CELL + CELL / 2;
+  const hy = FIELD_Y + h.y * CELL + CELL / 2;
+  ctx.save();
+  ctx.fillStyle = '#0a0a10';
+  const off = 4;
+  ctx.beginPath();
+  ctx.arc(hx + state.dir.x * off, hy + state.dir.y * off, 2.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawPauseGhost() {
+  // When paused, dim the canvas slightly so the pause overlay reads cleanly.
+  ctx.fillStyle = 'rgba(10, 10, 16, 0.45)';
+  ctx.fillRect(0, 0, W, H);
+}
+
+function draw() {
+  // Apply a small screen-shake translate on death.
+  let sx = 0, sy = 0;
+  if (state.shake > 0) {
+    const a = state.shake / 220;
+    sx = (Math.random() - 0.5) * 8 * a;
+    sy = (Math.random() - 0.5) * 8 * a;
+  }
+  ctx.save();
+  ctx.translate(sx, sy);
+
+  drawBackground();
+  drawCore();
+  drawSnake();
+
+  if (state.phase === 'paused') drawPauseGhost();
+
+  ctx.restore();
+}
+
+// ---------- Main loop ----------
+let lastTs = 0;
+function loop(ts) {
+  const dt = lastTs === 0 ? 16 : Math.min(80, ts - lastTs);
+  lastTs = ts;
+
+  // Always advance the core pulse (so the menu/paused core still glows).
+  state.pulse = (state.pulse + dt) % 1000;
+  if (state.shake > 0) state.shake = Math.max(0, state.shake - dt);
+
+  if (state.phase === 'playing') {
+    state.stepTimer += dt;
+    const step = stepMs(state.snake.length);
+    // Run at most a few steps per frame in case of a big hitch; avoids
+    // a feedback loop where a long frame stacks fifty moves into one tick.
+    let guard = 0;
+    while (state.stepTimer >= step && guard < 4) {
+      state.stepTimer -= step;
+      stepSnake();
+      guard++;
+      // stepSnake may have ended the game; bail out of the while.
+      if (state.phase !== 'playing') break;
+    }
+  }
+
+  draw();
+  requestAnimationFrame(loop);
+}
+
+// ---------- Responsive sizing ----------
+fitCanvas(cvs, '.stage');
+
+// ---------- Kickoff ----------
+overlays.show('startScreen');
+requestAnimationFrame(loop);
+
+})();
+</script>
+
+</body>
+</html>

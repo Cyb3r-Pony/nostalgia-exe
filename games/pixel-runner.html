@@ -1,0 +1,1594 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>PIXEL RUNNER — Nostalgia.exe</title>
+<link rel="icon" type="image/svg+xml" href="../favicon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=Press+Start+2P&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="shared/arcade.css" />
+<style>
+  /* ==========================================================
+     PIXEL RUNNER — game-specific overrides.
+     Shared chrome comes from shared/arcade.css.
+     ========================================================== */
+  :root {
+    --runner:    #ffd866;
+    --runner-2:  #ff8a4c;
+    --cactus:    #7df98a;
+    --cactus-2:  #4ea56b;
+    --cactus-3:  #2b7a48;   /* deep shadow */
+    --cactus-f:  #ff7ab0;   /* flower pink */
+    --bird:      #ff4fa1;
+    --ground:    #b388ff;
+    --pit:       #1a1a2e;
+    --shield:    #7de6ff;   /* cyan shield aura */
+    --shield-2:  #c1f6ff;
+    --coin:      #ffd24a;   /* golden coin */
+    --coin-2:    #c6901a;
+    --coin-3:    #fff3b0;
+    --cloud:     #b0b8d4;
+    --mtn:       #4a4060;
+    --spark:     #ffe09e;   /* slide sparks */
+  }
+  [data-theme="light"] {
+    --runner:    #e5a530;
+    --runner-2:  #c65a20;
+    --cactus:    #3fa55c;
+    --cactus-2:  #2b6b3a;
+    --cactus-3:  #194524;
+    --cactus-f:  #d44a85;
+    --bird:      #c03a7a;
+    --ground:    #8565c2;
+    --pit:       #2a2a3e;
+    --shield:    #1aa5cc;
+    --shield-2:  #5fd0e8;
+    --coin:      #d4a020;
+    --coin-2:    #8a5e0c;
+    --coin-3:    #fde597;
+    --cloud:     #e8e8f4;
+    --mtn:       #a5a0b8;
+    --spark:     #c97e18;
+  }
+
+  canvas { max-width: 100%; max-height: 100%; image-rendering: pixelated; }
+
+  /* Start / gameover splash table */
+  .controls-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 6px 14px;
+    margin: 18px 0 22px;
+    text-align: left;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .controls-grid kbd {
+    background: var(--panel-2);
+    border: 1px solid var(--text);
+    padding: 2px 6px;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 9px;
+    min-width: 44px;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<div class="bg-grid"></div>
+<div class="scanlines"></div>
+
+<header class="topbar">
+  <a href="../index.html" class="back">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    EXIT
+  </a>
+  <div class="title-tag">PIXEL RUNNER<span class="ver">v1.0.0 // 1992.EXE</span></div>
+  <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme"></button>
+</header>
+
+<section class="hud" id="hud">
+  <div class="hud-col">
+    <div class="hud-stat score">DISTANCE<strong id="hudDist">0000 m</strong></div>
+    <div class="hud-stat">SPEED<strong id="hudSpeed">1.0x</strong></div>
+  </div>
+  <div class="hud-col">
+    <div class="hud-stat"><span style="color:var(--coin)">◉</span> COINS<strong id="hudCoins">000</strong></div>
+    <div class="hud-stat best">BEST<strong id="hudBest">0000 m</strong></div>
+  </div>
+  <div class="hud-col">
+    <div class="hud-stat lives">LIVES<strong id="hudLives">♥♥♥</strong></div>
+    <div class="hud-stat" id="hudShieldRow" style="color:var(--shield)">SHIELD<strong id="hudShield">OFF</strong></div>
+  </div>
+</section>
+
+<div class="stage">
+  <canvas id="game" width="900" height="360"></canvas>
+</div>
+
+<footer class="bottombar">
+  <div class="keys">
+    <span><kbd>SPACE</kbd> / <kbd>↑</kbd> JUMP</span>
+    <span><kbd>↓</kbd> DUCK</span>
+    <span><kbd>M</kbd> MUTE</span>
+    <span><kbd>P</kbd> PAUSE</span>
+  </div>
+  <div>© NOSTALGIA.EXE — <span class="blink">█</span></div>
+</footer>
+
+<div class="touch" id="touch">
+  <button id="tDuck" aria-label="Duck">▼</button>
+  <div class="right-cluster">
+    <button id="tJump" aria-label="Jump">▲</button>
+  </div>
+</div>
+
+<!-- Start menu -->
+<div class="overlay" id="startScreen">
+  <div class="card">
+    <div class="card-head">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span>pixel_runner.app</span>
+      <span>_ □ ×</span>
+    </div>
+    <h1>PIXEL RUNNER</h1>
+    <p>Outrun the grid. Dodge cacti, duck under drones, leap the holes — the further you go, the faster it gets.</p>
+
+    <div class="controls-grid">
+      <kbd>SPACE</kbd><span>start / jump / double-jump mid-air</span>
+      <kbd>↑</kbd><span>jump (same as SPACE)</span>
+      <kbd>↓</kbd><span>slide under low drones (lie flat on the grid)</span>
+      <kbd style="color:var(--shield)">◎</kbd><span>shield — absorbs one hit, appears every ~2 km</span>
+      <kbd style="color:var(--coin)">◉</kbd><span>golden coins — jump to collect, every few hundred m</span>
+    </div>
+
+    <button class="btn" id="startBtn">▶ START RUN</button>
+    <button class="btn ghost" id="muteBtnMenu">♪ SOUND ON</button>
+  </div>
+</div>
+
+<!-- Pause -->
+<div class="overlay hidden" id="pauseScreen">
+  <div class="card">
+    <div class="card-head">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span>pause.sys</span>
+      <span>_ □ ×</span>
+    </div>
+    <h2>PAUSED</h2>
+    <p>Catch your breath.</p>
+    <button class="btn" id="resumeBtn">▶ RESUME</button>
+    <button class="btn ghost" id="restartBtnPause">↻ RESTART</button>
+  </div>
+</div>
+
+<!-- Game over -->
+<div class="overlay hidden" id="gameoverScreen">
+  <div class="card">
+    <div class="card-head">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span>end_of_line.log</span>
+      <span>_ □ ×</span>
+    </div>
+    <h2 style="color:var(--accent-hot)">RUN ENDED</h2>
+    <p>The grid caught up with you.</p>
+    <div class="stat-row">
+      <div>DISTANCE<strong id="finalDist">0000 m</strong></div>
+      <div>BEST<strong id="finalBest">0000 m</strong></div>
+      <div>COINS<strong id="finalCoins">000</strong></div>
+    </div>
+    <p id="newBestMsg" style="color:var(--accent-2);margin:4px 0 16px;display:none">✦ NEW BEST ✦</p>
+    <p id="scoreStatus" class="score-status" data-state="idle"></p>
+    <button class="btn" id="retryBtn">↻ RUN AGAIN</button>
+    <a href="../index.html" class="btn ghost">◀ EXIT</a>
+  </div>
+</div>
+
+<!-- Public scoreboard plumbing -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.105.1"></script>
+<script src="../shared/supabase-config.js"></script>
+<script src="../shared/auth.js"></script>
+<script src="../shared/scores.js"></script>
+
+<script src="shared/arcade.js"></script>
+<script>
+/* =============================================================
+   PIXEL RUNNER — endless runner in the Google-dino tradition,
+   but with double-jump, duck-under, pits, and life pickups.
+   ============================================================= */
+
+(() => {
+const cvs = document.getElementById('game');
+const ctx = cvs.getContext('2d');
+const W = cvs.width, H = cvs.height;
+
+// ---------- Utilities from shared module ----------
+const { clamp, rand, randInt, pad, color, createAudio, createOverlayManager,
+        wireThemeToggle, fitCanvas } = Arcade;
+const css = color;
+
+// ---------- Theme ----------
+wireThemeToggle('themeToggle');
+
+// ---------- Audio ----------
+const audio = createAudio('pr.muted');
+const initAudio = audio.init;
+const beep  = audio.beep;
+const noise = audio.noise;
+const sfx = {
+  jump:     () => beep(360, 0.10, 'square',   0.11, 620),
+  doubleJ:  () => beep(620, 0.12, 'square',   0.11, 940),
+  land:     () => beep(160, 0.06, 'triangle', 0.10, 110),
+  // shield pickup: rising two-note chime with metallic tail
+  shield:   () => {
+    beep(520, 0.08, 'triangle', 0.12, 780);
+    setTimeout(() => beep(780, 0.10, 'triangle', 0.12, 1040), 70);
+    setTimeout(() => beep(1300, 0.06, 'sine', 0.08, 1600), 140);
+  },
+  // coin pickup: quick ascending bleep — arcade ker-chink
+  coin:     () => {
+    beep(980, 0.05, 'square', 0.11, 1320);
+    setTimeout(() => beep(1480, 0.08, 'square', 0.10, 1760), 45);
+  },
+  // shield break: noisy crunch
+  shieldBreak: () => { noise(0.12, 0.16); beep(380, 0.12, 'sawtooth', 0.12, 160); },
+  hit:      () => { noise(0.18, 0.20); beep(220, 0.18, 'sawtooth', 0.14, 80); },
+  gameover: () => { beep(440, 0.14, 'square', 0.14, 110); setTimeout(() => beep(220, 0.22, 'square', 0.14, 55), 150); },
+  step:     () => beep(90, 0.02, 'square',    0.05, 70),
+  duck:     () => beep(280, 0.05, 'square',   0.08, 180),
+  slide:    () => noise(0.06, 0.05),     // subtle scrape while sliding
+};
+
+// ---------- World geometry ----------
+const GROUND_Y    = 280;          // y at which ground surface lives
+const CEIL_Y      = 60;           // roughly — used for background scan
+const PLAYER_X    = 140;          // fixed horizontal position of runner
+const PLAYER_W    = 28;
+const PLAYER_H    = 42;
+// "Ducking" is now a full belly-slide: body is nearly flat on the
+// ground, much lower than a crouch. Width stretches out while height
+// shrinks so flying drones actually pass over.
+const DUCK_H      = 12;
+const SLIDE_W     = 44;           // slide silhouette width
+const GRAVITY     = 0.62;
+const JUMP_V      = -12.2;
+const DOUBLE_V    = -10.4;        // slightly weaker than the first jump
+const METERS_PER_PX = 0.10;       // tuned so "good" runs reach 1–3k m
+
+// ---------- Difficulty scaling ----------
+// base ramp: speed grows logarithmically-ish with distance so early
+// game is readable, late game pressures rhythm. Cap keeps late-game
+// from becoming unfair.
+function speedAt(dist) {
+  // dist is in pixels; convert to meters for readable scaling.
+  const m = dist * METERS_PER_PX;
+  return Math.min(6 + Math.log10(1 + m / 80) * 3.4, 14);
+}
+
+// ---------- Obstacles ----------
+// Shared shape: { kind, x, w, h, y, ... }
+// kind ∈ 'cactus' | 'bird' | 'pit'
+// pits live on the ground itself — they carve a gap in the floor.
+
+// Cactus cluster width/heights. Each variant has a distinct silhouette
+// so the player can read difficulty at a glance. Variant index maps to
+// a dedicated drawing routine in _drawCactus.
+//   0 saguaro-small  — single trunk, one low arm, pink flower
+//   1 saguaro-tall   — taller trunk, two arms, double flower crown
+//   2 cluster        — twin cacti, staggered heights
+//   3 barrel         — short fat barrel cactus with flower top
+//   4 thorn-bush     — low twisted bush with dotted spikes
+//   5 triple-spire   — three spires of different heights
+function newCactus(x) {
+  const variants = [
+    { variant: 0, w: 18, h: 34 },
+    { variant: 1, w: 22, h: 46 },
+    { variant: 2, w: 32, h: 38 },
+    { variant: 3, w: 26, h: 26 },   // short barrel — still head-height
+    { variant: 4, w: 34, h: 22 },   // low bush — short but very wide
+    { variant: 5, w: 44, h: 42 },   // triple spire — boss cactus
+  ];
+  const v = variants[randInt(0, variants.length - 1)];
+  return { kind: 'cactus', x, variant: v.variant, w: v.w, h: v.h, y: GROUND_Y - v.h };
+}
+
+// Birds fly at two altitudes:
+//   low — skims the ground (must SLIDE under, standing hits)
+//   high — head-height gap (must JUMP over, running under works too)
+// Low-bird body extends from y=236 down to y=256. The deep slide
+// (DUCK_H=12) parks the player at y=268-280, which comfortably clears.
+// A normal crouch (old DUCK_H=24) would have been y=256-280 — it would
+// have clipped the bird's bottom edge. That mismatch is deliberate: the
+// slide is the only way through.
+function newBird(x) {
+  const altitudes = [
+    { y: GROUND_Y - 44, force: 'slide' },   // low: body 236-256, must slide
+    { y: GROUND_Y - 88, force: 'jump' },    // high: jump-over / run-under
+  ];
+  // Weighted: 70% low so the slide gets exercised
+  const roll = Math.random();
+  const alt = roll < 0.70 ? altitudes[0] : altitudes[1];
+  return {
+    kind: 'bird', x, w: 30, h: 20,
+    y: alt.y, force: alt.force,
+    ft: 0,   // wing-flap timer
+  };
+}
+
+// Holes (pits) carve the floor. Short pit is clearable with a single
+// jump; long pit requires a double jump.
+function newPit(x, long = false) {
+  // Widths tuned against jump physics:
+  //   single jump airtime at speed 8  ≈ 40 frames → 320px span
+  //   double jump airtime            ≈ 70 frames → 560px span
+  const w = long ? randInt(160, 230) : randInt(70, 120);
+  return { kind: 'pit', x, w, h: 0, y: GROUND_Y, long };
+}
+
+// Pickups
+//   shield — every ~2 km. Absorbs one hit instead of costing a life.
+//   coin   — every ~300 m. Just score, but feels great to collect.
+// Both sit at jumpable height so the player has to leave the ground.
+function newShield(x) {
+  return {
+    kind: 'shield',
+    x, w: 26, h: 26,
+    y: GROUND_Y - 82,    // requires a jump to reach, within single-apex range
+    ft: 0,
+    taken: false,
+  };
+}
+
+function newCoin(x) {
+  // Vertical wobble gives coins their own motion vs shields.
+  return {
+    kind: 'coin',
+    x, w: 18, h: 18,
+    y: GROUND_Y - 70,
+    ft: 0,
+    taken: false,
+  };
+}
+
+// ---------- Parallax background layers ----------
+// Drawn in game-frame, scrolled by a fraction of the current speed so
+// distance feels real.
+const clouds = Array.from({length: 6}, () => ({
+  x: Math.random() * W,
+  y: 30 + Math.random() * 80,
+  sp: 0.10 + Math.random() * 0.10,
+  w: 40 + Math.random() * 30,
+}));
+const mountains = Array.from({length: 5}, (_, i) => ({
+  x: (W / 4) * i + Math.random() * 40,
+  y: GROUND_Y - 40 - Math.random() * 30,
+  sp: 0.28,
+  w: 140 + Math.random() * 60,
+  h: 50 + Math.random() * 30,
+}));
+const stars = Array.from({length: 40}, () => ({
+  x: Math.random() * W,
+  y: Math.random() * (GROUND_Y - 40),
+  r: Math.random() * 1.2 + 0.3,
+  a: Math.random() * 0.5 + 0.3,
+  sp: 0.04,
+}));
+
+// ---------- Particle system (dust + sparkle) ----------
+const PARTS = [];
+class Particle {
+  constructor(x, y, col, vx, vy, life, sz = 3) {
+    this.x = x; this.y = y; this.col = col;
+    this.vx = vx; this.vy = vy;
+    this.life = life; this.ml = life;
+    this.sz = sz;
+  }
+  tick() {
+    this.x += this.vx;
+    this.y += this.vy;
+    this.vy += 0.12;
+    this.life--;
+    return this.life > 0;
+  }
+  draw() {
+    ctx.globalAlpha = this.life / this.ml;
+    ctx.fillStyle = this.col;
+    ctx.fillRect(this.x - this.sz/2, this.y - this.sz/2, this.sz, this.sz);
+    ctx.globalAlpha = 1;
+  }
+}
+function puff(x, y, col, n = 8, spread = 2) {
+  for (let i = 0; i < n; i++) {
+    const a = rand(0, Math.PI * 2);
+    const s = rand(0.4, spread);
+    PARTS.push(new Particle(
+      x + rand(-2, 2), y + rand(-2, 2),
+      col, Math.cos(a) * s, Math.sin(a) * s - 0.4,
+      randInt(12, 22), randInt(2, 4)
+    ));
+  }
+}
+
+// ---------- Game state ----------
+class Game {
+  constructor() {
+    this.hs = parseInt(localStorage.getItem('pr.hs') || '0');
+    this.state = 'menu';
+    this.keys = {};
+    this._reset();
+  }
+
+  _reset() {
+    // Player
+    this.py = GROUND_Y - PLAYER_H;
+    this.vy = 0;
+    this.grounded = true;
+    this.jumpsUsed = 0;
+    this.ducking = false;
+    this.legT = 0;          // step animation counter
+    this.legFrame = 0;
+    this.falling = false;   // fell into a pit
+    this.invuln = 0;        // frames of invincibility after hit
+    this.dying = false;
+    this.dyT = 0;
+
+    // World
+    this.dist = 0;               // pixels
+    this.speed = 6;              // current scroll speed
+    this.lives = 3;
+    this.coins = 0;              // collected coins (score-only)
+    this.shield = false;         // true if shield is active
+    this.shieldPulse = 0;        // animation timer for shield ring
+
+    // Spawning — managed by a "next thing" distance counter. We always
+    // know where the next obstacle or pickup will land.
+    this.obstacles = [];
+    this.pickups = [];
+    this.nextSpawnX   = W + 200; // first obstacle appears shortly after start
+    this.nextShieldM  = 2000;    // first shield at 2 km
+    this.nextCoinM    = 150;     // first coin by 150 m — guaranteed visible before 500 m
+    this.recentPits   = 0;       // prevents back-to-back long pits
+    this.lastKind     = null;
+    this.safeUntilX   = W + 60;  // reserved buffer in front of player for fair start
+
+    // Easy ramp for first ~150m
+    this.rampFrames = 0;
+
+    // Slide FX cadence — throttle dust/spark spawns
+    this.slideFxT = 0;
+  }
+
+  // ---------- Input ----------
+  key(e, down) {
+    this.keys[e.code] = down;
+    if (!down) {
+      // releasing Down-arrow: stand up. Snap py back to standing height so
+      // the full sprite plants on the ground immediately (not one frame of
+      // "clipping into the floor" before the ground-contact correction).
+      if (e.code === 'ArrowDown' && this.state === 'playing' && !this.dying) {
+        this.ducking = false;
+        if (this.grounded) this.py = GROUND_Y - PLAYER_H;
+      }
+      return;
+    }
+    // Start the run with SPACE or UP from menu / gameover
+    if (this.state === 'menu' || this.state === 'gameover') {
+      if (e.code === 'Space' || e.code === 'ArrowUp') {
+        this.start();
+        return;
+      }
+    }
+    if (this.state !== 'playing' || this.dying) {
+      if (e.code === 'KeyP' && this.state === 'paused') {
+        this.state = 'playing'; hideAllOverlays();
+      }
+      return;
+    }
+    if (e.code === 'Space' || e.code === 'ArrowUp') this.jump();
+    if (e.code === 'ArrowDown') this.duck();
+    if (e.code === 'KeyP') {
+      this.state = 'paused'; showOverlay('pauseScreen');
+    }
+    if (e.code === 'KeyM') { audio.toggle(); updateMuteLabel(); }
+  }
+
+  start() {
+    initAudio();
+    this._reset();
+    this.state = 'playing';
+    hideAllOverlays();
+    updateHUD();
+  }
+
+  jump() {
+    if (this.falling || this.dying) return;
+    if (this.grounded) {
+      this.vy = JUMP_V;
+      this.grounded = false;
+      this.jumpsUsed = 1;
+      this.ducking = false;
+      sfx.jump();
+      // small dust kick
+      puff(PLAYER_X + 4, GROUND_Y - 2, css('--ground'), 6, 1.6);
+    } else if (this.jumpsUsed < 2) {
+      // double jump — weaker impulse
+      this.vy = DOUBLE_V;
+      this.jumpsUsed = 2;
+      sfx.doubleJ();
+      // sparkles at feet, mid-air
+      puff(PLAYER_X + PLAYER_W/2, this.py + PLAYER_H, css('--accent-2'), 10, 2.4);
+    }
+  }
+
+  duck() {
+    if (!this.grounded) {
+      // fast-fall when pressing down mid-air, so ducking is responsive
+      if (this.vy < 4) this.vy = 6;
+      return;
+    }
+    if (!this.ducking) {
+      this.ducking = true;
+      // Snap py down so the slide sprite hugs the ground immediately.
+      // Without this, footY (py + DUCK_H) never reaches GROUND_Y, so the
+      // ground-contact correction never fires and the shrunk sprite stays
+      // drawn at the old standing py — visually floating in the sky.
+      this.py = GROUND_Y - DUCK_H;
+      sfx.duck();
+    }
+  }
+
+  // ---------- World spawning ----------
+  // The world is deterministic-ish per run: we roll the next spawn
+  // when there's no obstacle in the last 260px to the right of the
+  // rightmost existing obstacle. That gives us reliable spacing.
+  maybeSpawn() {
+    // Find the rightmost existing obstacle/pickup
+    let rx = W;
+    for (const o of this.obstacles) if (o.x + o.w > rx) rx = o.x + o.w;
+
+    if (rx > this.nextSpawnX) return;
+
+    // Spacing scales with speed — slower at the start, tighter later.
+    const gap = rand(180, 320) + this.speed * 8;
+
+    const m = this.dist * METERS_PER_PX;
+
+    // First 80m: only simple cacti so players learn
+    let kind;
+    if (m < 80) {
+      kind = 'cactus';
+    } else {
+      // Weighted roll. Pits and birds unlock with distance.
+      const weights = [
+        { k: 'cactus',   w: 50 },
+        { k: 'bird',     w: m >= 120 ? 22 : 0 },
+        { k: 'pitShort', w: m >= 180 ? 16 : 0 },
+        { k: 'pitLong',  w: m >= 360 ? 10 : 0 },
+      ];
+      // avoid two pits in a row (would feel cheap)
+      if (this.lastKind && this.lastKind.startsWith('pit')) {
+        for (const wgt of weights) if (wgt.k.startsWith('pit')) wgt.w = 0;
+      }
+      const total = weights.reduce((a, b) => a + b.w, 0);
+      let r = Math.random() * total;
+      for (const wgt of weights) {
+        if (r < wgt.w) { kind = wgt.k; break; }
+        r -= wgt.w;
+      }
+    }
+
+    const spawnX = rx + gap;
+    let obj;
+    if (kind === 'cactus') obj = newCactus(spawnX);
+    else if (kind === 'bird') obj = newBird(spawnX);
+    else if (kind === 'pitShort') obj = newPit(spawnX, false);
+    else if (kind === 'pitLong') obj = newPit(spawnX, true);
+
+    if (obj) {
+      this.obstacles.push(obj);
+      this.lastKind = kind;
+      // After each spawn, queue the next "check" only — the rx walk
+      // above is what actually gates the next spawn.
+      this.nextSpawnX = spawnX;
+    }
+  }
+
+  maybeSpawnShield() {
+    const m = this.dist * METERS_PER_PX;
+    if (m < this.nextShieldM) return;
+    // Only one shield in flight at a time.
+    if (this.pickups.some(p => p.kind === 'shield' && !p.taken)) return;
+    const spawnX = Math.max(W, this.rightmostObjectX() + 320);
+    this.pickups.push(newShield(spawnX));
+    // ~2km cadence with ±150m jitter
+    this.nextShieldM += 2000 + randInt(-150, 150);
+  }
+
+  maybeSpawnCoin() {
+    const m = this.dist * METERS_PER_PX;
+    if (m < this.nextCoinM) return;
+    // Spawn just past the right edge (not way out beyond the rightmost
+    // obstacle) so the coin scrolls onto the screen quickly — roughly
+    // 1 second later instead of 3+. Clamp to a minimum gap from any
+    // existing obstacle so we don't fuse with a cactus sprite.
+    const spawnX = Math.max(W + 40, this.rightmostObjectX() + 90);
+    this.pickups.push(newCoin(spawnX));
+    // Coin cadence: roughly every 220m, ±40m jitter — frequent enough
+    // that the player sees one nearly every run segment, but each still
+    // a deliberate jump target.
+    this.nextCoinM += 220 + randInt(-40, 40);
+  }
+
+  rightmostObjectX() {
+    let rx = W;
+    for (const o of this.obstacles) if (o.x + o.w > rx) rx = o.x + o.w;
+    for (const p of this.pickups)   if (p.x + p.w > rx) rx = p.x + p.w;
+    return rx;
+  }
+
+  // ---------- Is the player currently standing over a pit? ----------
+  overPit() {
+    const px1 = PLAYER_X + 4;
+    const px2 = PLAYER_X + PLAYER_W - 4;
+    for (const o of this.obstacles) {
+      if (o.kind !== 'pit') continue;
+      if (px1 < o.x + o.w && px2 > o.x) {
+        // Player's footprint overlaps a pit. True iff the player's
+        // *center of mass* has crossed the pit's left edge so they
+        // can't just step back.
+        const pcx = PLAYER_X + PLAYER_W / 2;
+        if (pcx > o.x && pcx < o.x + o.w) return true;
+      }
+    }
+    return false;
+  }
+
+  // ---------- Update ----------
+  update() {
+    if (this.state !== 'playing') return;
+
+    // Dying animation: short freeze, then check if we have a life left.
+    if (this.dying) {
+      this.dyT++;
+      this.py += this.vy;
+      this.vy += GRAVITY * 0.8;
+      if (this.dyT > 55) {
+        if (this.lives <= 0) {
+          this.state = 'gameover';
+          this._commitHighScore();
+          document.getElementById('finalDist').textContent =
+            pad(Math.floor(this.dist * METERS_PER_PX), 4) + ' m';
+          document.getElementById('finalBest').textContent =
+            pad(Math.floor(this.hs), 4) + ' m';
+          document.getElementById('finalCoins').textContent =
+            pad(this.coins, 3);
+          document.getElementById('newBestMsg').style.display =
+            (Math.floor(this.dist * METERS_PER_PX) >= this.hs &&
+             this.hs > 0) ? 'block' : 'none';
+          // Post the distance (in meters) to the public scoreboard.
+          if (window.NostalgiaScores) {
+            window.NostalgiaScores.submitAndReport(
+              'pixel-runner',
+              Math.floor(this.dist * METERS_PER_PX),
+              document.getElementById('scoreStatus')
+            );
+          }
+          showOverlay('gameoverScreen');
+          updateHUD();
+          sfx.gameover();
+        } else {
+          // respawn: reset player to ground, give brief invuln
+          this.py = GROUND_Y - PLAYER_H;
+          this.vy = 0;
+          this.grounded = true;
+          this.jumpsUsed = 0;
+          this.falling = false;
+          this.dying = false;
+          this.dyT = 0;
+          this.invuln = 90;   // ~1.5s of mercy frames
+          // Clear any obstacle currently overlapping the player so we
+          // don't insta-die on respawn.
+          this.obstacles = this.obstacles.filter(o => {
+            const ox2 = o.x + o.w;
+            return ox2 < PLAYER_X - 8 || o.x > PLAYER_X + PLAYER_W + 40;
+          });
+        }
+      }
+      // Tick particles even during dying so the effect fades
+      for (let i = PARTS.length - 1; i >= 0; i--) if (!PARTS[i].tick()) PARTS.splice(i, 1);
+      return;
+    }
+
+    // --- speed/difficulty ---
+    this.rampFrames++;
+    const dt = this.speed;
+    this.dist += dt;
+    this.speed = speedAt(this.dist);
+
+    // --- parallax ---
+    for (const c of clouds) { c.x -= dt * c.sp; if (c.x + c.w < 0) { c.x = W + rand(0, 100); c.y = 30 + Math.random() * 80; } }
+    for (const m of mountains) { m.x -= dt * m.sp; if (m.x + m.w < 0) m.x = W + rand(20, 160); }
+    for (const s of stars) { s.x -= dt * s.sp; if (s.x < 0) s.x = W; }
+
+    // --- player physics ---
+    if (!this.grounded) {
+      this.vy += GRAVITY;
+      this.py += this.vy;
+    }
+    // Ground contact
+    const footY = this.py + (this.ducking ? DUCK_H : PLAYER_H);
+    if (footY >= GROUND_Y && !this.falling) {
+      // If we're about to land and there's a pit under us, fall in.
+      if (this.overPit()) {
+        this.falling = true;
+        this.grounded = false;
+        // keep vy so player plummets naturally
+      } else {
+        // Land.
+        this.py = GROUND_Y - (this.ducking ? DUCK_H : PLAYER_H);
+        if (!this.grounded) {
+          // freshly landed
+          sfx.land();
+          puff(PLAYER_X + PLAYER_W/2, GROUND_Y - 2, css('--ground'), 8, 1.4);
+        }
+        this.grounded = true;
+        this.vy = 0;
+        this.jumpsUsed = 0;
+      }
+    }
+    // Falling into pit — death check when we drop below screen
+    if (this.falling) {
+      this.py += this.vy;
+      this.vy += GRAVITY;
+      if (this.py > H + 40) {
+        this._takeHit('pit');
+      }
+    }
+
+    // --- step animation ---
+    if (this.grounded && !this.ducking) {
+      this.legT += dt * 0.12;
+      this.legFrame = Math.floor(this.legT) & 1;
+    } else {
+      this.legFrame = 0;
+    }
+
+    // --- slide FX: sparks + dust streaking behind the player ---
+    if (this.ducking && this.grounded) {
+      this.slideFxT++;
+      // Dust puff every ~3 frames — enough to leave a continuous trail.
+      if (this.slideFxT % 3 === 0) {
+        const bx = PLAYER_X - 6;
+        const by = GROUND_Y - 2;
+        PARTS.push(new Particle(
+          bx, by, css('--ground'),
+          -rand(1.0, 2.5), -rand(0.2, 0.8),
+          randInt(14, 22), randInt(2, 4)
+        ));
+      }
+      // Spark every ~5 frames, brighter and shorter-lived
+      if (this.slideFxT % 5 === 0) {
+        const bx = PLAYER_X - 2;
+        const by = GROUND_Y - 1;
+        PARTS.push(new Particle(
+          bx, by, css('--spark'),
+          -rand(2.0, 4.0), -rand(0.5, 1.6),
+          randInt(6, 12), 2
+        ));
+      }
+      // Subtle scrape sound, throttled
+      if (this.slideFxT % 18 === 0) sfx.slide();
+    }
+
+    // --- invuln tick ---
+    if (this.invuln > 0) this.invuln--;
+
+    // --- scroll obstacles and pickups ---
+    for (const o of this.obstacles) {
+      o.x -= dt;
+      if (o.kind === 'bird') o.ft++;
+    }
+    for (const p of this.pickups) { p.x -= dt; p.ft++; }
+
+    // Cull off-screen
+    this.obstacles = this.obstacles.filter(o => o.x + o.w > -20);
+    this.pickups = this.pickups.filter(p => p.x + p.w > -20 && !p.taken);
+
+    // --- spawn new stuff ---
+    this.maybeSpawn();
+    this.maybeSpawnShield();
+    this.maybeSpawnCoin();
+
+    // --- shield visual tick ---
+    if (this.shield) this.shieldPulse++;
+
+    // --- collisions ---
+    if (this.invuln <= 0 && !this.falling) {
+      const px1 = PLAYER_X + 3;
+      const py1 = this.py + 3;
+      const pw  = PLAYER_W - 6;
+      const ph  = (this.ducking ? DUCK_H : PLAYER_H) - 6;
+      const px2 = px1 + pw;
+      const py2 = py1 + ph;
+
+      for (const o of this.obstacles) {
+        if (o.kind === 'pit') continue;   // pits handled by overPit landing check
+        const ox2 = o.x + o.w;
+        const oy2 = o.y + o.h;
+        if (px1 < ox2 && px2 > o.x && py1 < oy2 && py2 > o.y) {
+          this._takeHit(o.kind);
+          break;
+        }
+      }
+    }
+
+    for (const p of this.pickups) {
+      if (p.taken) continue;
+      // Player collision box accounts for the wider slide silhouette
+      // so low-hanging coins aren't missed while sliding forward.
+      const pw  = (this.ducking ? SLIDE_W : PLAYER_W) - 6;
+      const ph  = (this.ducking ? DUCK_H  : PLAYER_H) - 6;
+      const px1 = (this.ducking ? (PLAYER_X - 8) : PLAYER_X) + 3;
+      const py1 = this.py + 3;
+      const px2 = px1 + pw;
+      const py2 = py1 + ph;
+      if (px1 < p.x + p.w && px2 > p.x && py1 < p.y + p.h && py2 > p.y) {
+        p.taken = true;
+        if (p.kind === 'shield') {
+          this.shield = true;
+          this.shieldPulse = 0;
+          sfx.shield();
+          puff(p.x + p.w/2, p.y + p.h/2, css('--shield'),  20, 3.2);
+          puff(p.x + p.w/2, p.y + p.h/2, css('--shield-2'), 10, 2.4);
+        } else if (p.kind === 'coin') {
+          this.coins++;
+          sfx.coin();
+          puff(p.x + p.w/2, p.y + p.h/2, css('--coin'),   12, 2.4);
+          puff(p.x + p.w/2, p.y + p.h/2, css('--coin-3'),  6, 1.8);
+        }
+        updateHUD();
+      }
+    }
+
+    // --- particles ---
+    for (let i = PARTS.length - 1; i >= 0; i--) if (!PARTS[i].tick()) PARTS.splice(i, 1);
+
+    // --- running sfx step (subtle; plays twice per cycle) ---
+    if (this.grounded && !this.ducking && (Math.floor(this.legT * 2) % 2 === 0)
+        && this._lastLegSfx !== this.legFrame) {
+      this._lastLegSfx = this.legFrame;
+      // keep steps quiet — a lot of them happen
+      if (Math.random() < 0.5) sfx.step();
+    }
+
+    updateHUD();
+  }
+
+  _takeHit(cause) {
+    if (this.dying) return;
+    // Shield absorbs one non-pit hit. Pits always kill because the
+    // player has already fallen off the screen — there's nothing left
+    // to protect.
+    if (this.shield && cause !== 'pit') {
+      this.shield = false;
+      this.shieldPulse = 0;
+      this.invuln = 60;   // brief mercy so we don't instantly re-collide
+      sfx.shieldBreak();
+      // shatter sparks radiate outward
+      puff(PLAYER_X + PLAYER_W/2, this.py + PLAYER_H/2, css('--shield'),   26, 3.6);
+      puff(PLAYER_X + PLAYER_W/2, this.py + PLAYER_H/2, css('--shield-2'), 14, 2.4);
+      // small knock-back bounce so the player visually reacts
+      if (this.grounded) { this.vy = -5; this.grounded = false; }
+      updateHUD();
+      return;
+    }
+    this.lives--;
+    sfx.hit();
+    this.dying = true;
+    this.dyT = 0;
+    this.invuln = 0;
+    // Bounce up on hit for a bit of visual feedback (not on pit — in
+    // that case the player already fell, so keep falling).
+    if (cause !== 'pit') {
+      this.vy = -6;
+      this.grounded = false;
+    }
+    puff(PLAYER_X + PLAYER_W/2, this.py + PLAYER_H/2, css('--accent-hot'), 22, 3.2);
+    updateHUD();
+  }
+
+  _commitHighScore() {
+    const m = Math.floor(this.dist * METERS_PER_PX);
+    if (m > this.hs) {
+      this.hs = m;
+      localStorage.setItem('pr.hs', this.hs);
+    }
+  }
+
+  // ---------- Draw ----------
+  draw() {
+    // sky gradient
+    const g = ctx.createLinearGradient(0, 0, 0, GROUND_Y);
+    g.addColorStop(0, css('--bg-alt'));
+    g.addColorStop(1, css('--panel-2'));
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, GROUND_Y);
+
+    // stars
+    ctx.fillStyle = css('--text');
+    for (const s of stars) {
+      ctx.globalAlpha = s.a;
+      ctx.fillRect(Math.floor(s.x), Math.floor(s.y), 2, 2);
+    }
+    ctx.globalAlpha = 1;
+
+    // mountains
+    ctx.fillStyle = css('--mtn');
+    for (const m of mountains) {
+      ctx.beginPath();
+      ctx.moveTo(m.x, m.y + m.h);
+      ctx.lineTo(m.x + m.w/2, m.y);
+      ctx.lineTo(m.x + m.w, m.y + m.h);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // clouds
+    ctx.fillStyle = css('--cloud');
+    ctx.globalAlpha = 0.65;
+    for (const c of clouds) {
+      ctx.fillRect(c.x,      c.y,     c.w,     5);
+      ctx.fillRect(c.x + 6,  c.y - 4, c.w - 12, 5);
+      ctx.fillRect(c.x + 12, c.y + 4, c.w - 24, 5);
+    }
+    ctx.globalAlpha = 1;
+
+    // below-horizon "pit" backdrop (shows when a gap is in front)
+    ctx.fillStyle = css('--pit');
+    ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y);
+
+    // ground, carved by pits
+    this._drawGround();
+
+    // pickups (shield + coin)
+    for (const p of this.pickups) {
+      if (p.kind === 'shield')    this._drawShield(p);
+      else if (p.kind === 'coin') this._drawCoin(p);
+    }
+
+    // obstacles
+    for (const o of this.obstacles) {
+      if (o.kind === 'cactus') this._drawCactus(o);
+      else if (o.kind === 'bird') this._drawBird(o);
+      // pits are rendered in the ground pass
+    }
+
+    // player
+    this._drawPlayer();
+
+    // particles on top
+    for (const p of PARTS) p.draw();
+
+    // scanlines on canvas
+    ctx.fillStyle = 'rgba(0,0,0,0.06)';
+    for (let y = 0; y < H; y += 3) ctx.fillRect(0, y, W, 1);
+
+    // Menu/pause overlays are HTML — canvas only shows the world.
+  }
+
+  _drawGround() {
+    // Build a sorted list of pit spans and draw ground everywhere else.
+    const pits = this.obstacles.filter(o => o.kind === 'pit')
+                                .sort((a, b) => a.x - b.x);
+    ctx.fillStyle = css('--ground');
+    let cursor = 0;
+    for (const p of pits) {
+      const left  = Math.max(0, p.x);
+      const right = Math.min(W, p.x + p.w);
+      if (right < 0 || left > W) continue;
+      if (left > cursor) ctx.fillRect(cursor, GROUND_Y, left - cursor, 6);
+      // pit edges — little lip on each side for readability
+      ctx.fillStyle = css('--accent-hot');
+      if (p.x > 0 && p.x < W)            ctx.fillRect(Math.max(0, p.x) - 2, GROUND_Y, 3, 8);
+      if (p.x + p.w > 0 && p.x + p.w < W) ctx.fillRect(Math.min(W, p.x + p.w) - 1, GROUND_Y, 3, 8);
+      ctx.fillStyle = css('--ground');
+      cursor = right;
+    }
+    if (cursor < W) ctx.fillRect(cursor, GROUND_Y, W - cursor, 6);
+
+    // Ground texture: dashed line 12px below surface for depth
+    ctx.fillStyle = css('--accent-2');
+    const dashOffset = Math.floor(this.dist) % 24;
+    for (let x = -dashOffset; x < W; x += 24) {
+      // only draw the dash if there's not a pit covering this span
+      let blocked = false;
+      for (const p of pits) {
+        if (x + 10 > p.x && x < p.x + p.w) { blocked = true; break; }
+      }
+      if (!blocked) ctx.fillRect(x, GROUND_Y + 10, 10, 2);
+    }
+  }
+
+  _drawPlayer() {
+    const x = PLAYER_X;
+    const y = this.py;
+    const body    = css('--runner');
+    const body2   = css('--runner-2');
+    const outline = css('--text');
+
+    // flicker while invulnerable
+    if (this.invuln > 0 && (this.invuln % 6 < 3)) return;
+
+    ctx.save();
+    if (this.ducking && this.grounded) {
+      // Slide silhouette: character pressed flat against the ground.
+      // The ENTIRE sprite stays within the DUCK_H band (no popped-up head)
+      // so it reads as "lying down and sliding", not "crouching".
+      const w  = SLIDE_W;
+      const h  = DUCK_H;            // 12px — full slide height
+      const bx = x - 10;            // back edge (trailing end)
+      const fx = x + w - 14;        // forward edge (head end)
+
+      // Ground shadow smear — long, thin, slightly offset behind
+      ctx.fillStyle = 'rgba(0,0,0,0.28)';
+      ctx.fillRect(bx - 6, GROUND_Y - 1, w + 18, 2);
+
+      // Torso (main body band) — orange, bottom-heavy so belly hugs ground
+      ctx.fillStyle = body;
+      ctx.fillRect(bx, y + 2, w, h - 3);
+
+      // Back stripe along top of torso (racing-stripe flourish)
+      ctx.fillStyle = body2;
+      ctx.fillRect(bx, y + 2, w, 3);
+
+      // Head projects FORWARD at the same y-band as the torso (no pop-up).
+      // It's a short nub at the front of the silhouette.
+      ctx.fillStyle = body;
+      ctx.fillRect(fx, y + 2, 12, h - 3);
+
+      // Visor strip — thin cyan band across the head, still flush with torso
+      ctx.fillStyle = css('--accent-2');
+      ctx.fillRect(fx + 2, y + 4, 9, 3);
+
+      // Eye glint on the forward tip
+      ctx.fillStyle = outline;
+      ctx.fillRect(fx + 8, y + 4, 2, 2);
+
+      // Trailing leg/boot kicking backward — stays low, in the ground band
+      ctx.fillStyle = outline;
+      ctx.fillRect(bx - 10, y + h - 5, 12, 4);
+      ctx.fillStyle = body2;
+      ctx.fillRect(bx - 4,  y + h - 8, 8, 3);
+
+      // Front arm braced along the ground ahead of the body
+      ctx.fillStyle = body2;
+      ctx.fillRect(fx - 8, y + h - 3, 14, 2);
+
+      // Motion lines streaking off the back for speed
+      ctx.fillStyle = css('--spark');
+      ctx.globalAlpha = 0.85;
+      for (let i = 0; i < 4; i++) {
+        const lx = bx - 14 - i * 7;
+        ctx.fillRect(lx, y + 4 + (i % 2) * 3, 7, 1);
+      }
+      ctx.globalAlpha = 1;
+    } else {
+      // Running pose
+      const h = PLAYER_H;
+      const w = PLAYER_W;
+
+      // body
+      ctx.fillStyle = body;
+      ctx.fillRect(x, y + 10, w, h - 22);
+      // head
+      ctx.fillRect(x + 6, y, w - 10, 12);
+      // visor
+      ctx.fillStyle = css('--accent-2');
+      ctx.fillRect(x + 8, y + 3, w - 14, 4);
+
+      // chest stripe
+      ctx.fillStyle = body2;
+      ctx.fillRect(x, y + 18, w, 4);
+
+      // arms (swing opposite to legs for natural gait)
+      ctx.fillStyle = body2;
+      if (this.grounded) {
+        if (this.legFrame === 0) {
+          ctx.fillRect(x - 3, y + 14, 5, 12);
+          ctx.fillRect(x + w - 2, y + 18, 5, 10);
+        } else {
+          ctx.fillRect(x - 3, y + 18, 5, 10);
+          ctx.fillRect(x + w - 2, y + 14, 5, 12);
+        }
+      } else {
+        // arms raised while airborne
+        ctx.fillRect(x - 3, y + 12, 5, 10);
+        ctx.fillRect(x + w - 2, y + 12, 5, 10);
+      }
+
+      // legs — 2-frame cycle while running, "tuck" while airborne
+      ctx.fillStyle = outline;
+      if (!this.grounded) {
+        // tucked legs while airborne
+        ctx.fillRect(x + 4,  y + h - 10, 7, 10);
+        ctx.fillRect(x + w - 11, y + h - 10, 7, 10);
+      } else if (this.legFrame === 0) {
+        // left forward / right back
+        ctx.fillRect(x + 2,  y + h - 12, 8, 12);
+        ctx.fillRect(x + w - 10, y + h - 8, 8, 8);
+      } else {
+        // left back / right forward
+        ctx.fillRect(x + 2,  y + h - 8, 8, 8);
+        ctx.fillRect(x + w - 10, y + h - 12, 8, 12);
+      }
+    }
+    ctx.restore();
+
+    // Shield aura — drawn last so it wraps the whole silhouette.
+    if (this.shield) this._drawShieldAura();
+  }
+
+  _drawShieldAura() {
+    // Bubble radius pulses to sell "energy field" vibe.
+    const ducking = this.ducking && this.grounded;
+    const cx = PLAYER_X + (ducking ? SLIDE_W / 2 - 8 : PLAYER_W / 2);
+    const cy = this.py + (ducking ? DUCK_H / 2 : PLAYER_H / 2);
+    const pulse = Math.sin(this.shieldPulse * 0.18) * 2;
+    const rx = (ducking ? SLIDE_W / 2 + 8 : PLAYER_W / 2 + 10) + pulse;
+    const ry = (ducking ? DUCK_H * 1.8    : PLAYER_H / 2 + 8) + pulse;
+
+    ctx.save();
+    // outer glow
+    ctx.globalAlpha = 0.25;
+    ctx.fillStyle = css('--shield');
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx + 3, ry + 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // inner ring
+    ctx.globalAlpha = 0.85;
+    ctx.strokeStyle = css('--shield-2');
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // hex accent tick marks around the ring
+    ctx.globalAlpha = 0.7;
+    ctx.fillStyle = css('--shield');
+    for (let i = 0; i < 6; i++) {
+      const a  = (i / 6) * Math.PI * 2 + this.shieldPulse * 0.02;
+      const tx = cx + Math.cos(a) * rx;
+      const ty = cy + Math.sin(a) * ry;
+      ctx.fillRect(tx - 1, ty - 1, 3, 3);
+    }
+    ctx.restore();
+  }
+
+  _drawCactus(o) {
+    const skin   = css('--cactus');
+    const shade  = css('--cactus-2');
+    const dark   = css('--cactus-3');
+    const flower = css('--cactus-f');
+
+    // Soft ground shadow for every cactus variant
+    ctx.fillStyle = 'rgba(0,0,0,0.18)';
+    ctx.fillRect(o.x - 2, GROUND_Y - 1, o.w + 4, 2);
+
+    switch (o.variant) {
+      case 0: {
+        // --- saguaro-small: single trunk, low arm on one side, flower crown
+        const tx = o.x + 4, tw = o.w - 8;
+        ctx.fillStyle = skin;
+        ctx.fillRect(tx, o.y + 4, tw, o.h - 4);
+        // highlight column
+        ctx.fillStyle = shade;
+        ctx.fillRect(tx + 1, o.y + 4, 2, o.h - 4);
+        ctx.fillStyle = dark;
+        ctx.fillRect(tx + tw - 2, o.y + 4, 2, o.h - 4);
+        // little low arm
+        ctx.fillStyle = skin;
+        ctx.fillRect(o.x,      o.y + 18, 4, 6);
+        ctx.fillRect(o.x,      o.y + 14, 3, 6);
+        ctx.fillStyle = dark;
+        ctx.fillRect(o.x,      o.y + 14, 1, 10);
+        // dotted spikes on trunk
+        ctx.fillStyle = dark;
+        for (let r = o.y + 8; r < o.y + o.h - 4; r += 4) {
+          ctx.fillRect(tx + 3, r, 1, 1);
+          ctx.fillRect(tx + tw - 4, r, 1, 1);
+        }
+        // pink flower bud on top
+        ctx.fillStyle = flower;
+        ctx.fillRect(tx + 1, o.y + 1, tw - 2, 3);
+        ctx.fillRect(tx + tw/2 - 1, o.y - 1, 2, 2);
+        break;
+      }
+
+      case 1: {
+        // --- saguaro-tall: tall trunk, two raised arms, double flower
+        const tx = o.x + 6, tw = o.w - 12;
+        ctx.fillStyle = skin;
+        ctx.fillRect(tx, o.y + 6, tw, o.h - 6);
+        ctx.fillStyle = dark;
+        ctx.fillRect(tx + tw - 2, o.y + 6, 2, o.h - 6);
+        ctx.fillStyle = shade;
+        ctx.fillRect(tx + 1, o.y + 6, 2, o.h - 6);
+        // left arm: up L-shape
+        ctx.fillStyle = skin;
+        ctx.fillRect(o.x,     o.y + 18, 4, 12);
+        ctx.fillRect(o.x,     o.y + 10, 3, 10);
+        ctx.fillStyle = dark;
+        ctx.fillRect(o.x,     o.y + 10, 1, 20);
+        // right arm: up L-shape
+        ctx.fillStyle = skin;
+        ctx.fillRect(o.x + o.w - 4, o.y + 24, 4, 10);
+        ctx.fillRect(o.x + o.w - 3, o.y + 14, 3, 12);
+        ctx.fillStyle = dark;
+        ctx.fillRect(o.x + o.w - 1, o.y + 14, 1, 20);
+        // spikes
+        ctx.fillStyle = dark;
+        for (let r = o.y + 10; r < o.y + o.h - 4; r += 5) {
+          ctx.fillRect(tx + 3, r, 1, 1);
+          ctx.fillRect(tx + tw - 4, r, 1, 1);
+        }
+        // crown flowers
+        ctx.fillStyle = flower;
+        ctx.fillRect(tx, o.y + 2, tw, 4);
+        ctx.fillRect(tx + tw/2 - 1, o.y - 1, 3, 3);
+        ctx.fillRect(o.x + 1,       o.y + 8, 2, 2);
+        ctx.fillRect(o.x + o.w - 3, o.y + 12, 2, 2);
+        break;
+      }
+
+      case 2: {
+        // --- cluster: twin trunks, staggered heights, with shared base
+        const leftW = 10, rightW = 10;
+        const leftX = o.x + 2;
+        const rightX = o.x + o.w - 12;
+        const leftH = o.h;
+        const rightH = o.h - 10;
+        // left (tall)
+        ctx.fillStyle = skin; ctx.fillRect(leftX,  o.y, leftW, leftH);
+        ctx.fillStyle = dark; ctx.fillRect(leftX + leftW - 2, o.y, 2, leftH);
+        // right (short)
+        ctx.fillStyle = skin; ctx.fillRect(rightX, o.y + 10, rightW, rightH);
+        ctx.fillStyle = dark; ctx.fillRect(rightX + rightW - 2, o.y + 10, 2, rightH);
+        // spikes
+        ctx.fillStyle = dark;
+        for (let r = o.y + 4; r < o.y + leftH - 3; r += 4) {
+          ctx.fillRect(leftX + 2, r, 1, 1); ctx.fillRect(leftX + 7, r, 1, 1);
+        }
+        for (let r = o.y + 14; r < o.y + 10 + rightH - 3; r += 4) {
+          ctx.fillRect(rightX + 2, r, 1, 1); ctx.fillRect(rightX + 7, r, 1, 1);
+        }
+        // flowers
+        ctx.fillStyle = flower;
+        ctx.fillRect(leftX + 2, o.y - 1, 6, 3);
+        ctx.fillRect(rightX + 3, o.y + 9, 4, 2);
+        // shared base mound
+        ctx.fillStyle = shade;
+        ctx.fillRect(o.x, o.y + o.h - 3, o.w, 3);
+        break;
+      }
+
+      case 3: {
+        // --- barrel: short fat cactus with ribs and large flower
+        ctx.fillStyle = skin;
+        ctx.fillRect(o.x + 2, o.y + 4, o.w - 4, o.h - 4);
+        // rib shading (vertical lines)
+        ctx.fillStyle = shade;
+        for (let cx = o.x + 4; cx < o.x + o.w - 4; cx += 4) {
+          ctx.fillRect(cx, o.y + 4, 1, o.h - 4);
+        }
+        ctx.fillStyle = dark;
+        ctx.fillRect(o.x + o.w - 4, o.y + 4, 2, o.h - 4);
+        // spike dots
+        ctx.fillStyle = dark;
+        for (let r = o.y + 8; r < o.y + o.h - 2; r += 4) {
+          for (let cc = o.x + 5; cc < o.x + o.w - 5; cc += 4) {
+            ctx.fillRect(cc, r, 1, 1);
+          }
+        }
+        // big pink flower crown
+        ctx.fillStyle = flower;
+        ctx.fillRect(o.x + 4, o.y, o.w - 8, 4);
+        ctx.fillRect(o.x + o.w/2 - 3, o.y - 2, 6, 3);
+        ctx.fillRect(o.x + o.w/2 - 1, o.y - 4, 2, 2);
+        break;
+      }
+
+      case 4: {
+        // --- thorn-bush: low tangled bush, dotted spikes, brown twigs
+        ctx.fillStyle = shade;
+        ctx.fillRect(o.x, o.y + 6, o.w, o.h - 6);
+        // leaf cluster
+        ctx.fillStyle = skin;
+        for (let cc = o.x + 2; cc < o.x + o.w - 2; cc += 4) {
+          ctx.fillRect(cc, o.y + 4, 3, 6);
+        }
+        ctx.fillStyle = dark;
+        // twig skeleton
+        ctx.fillRect(o.x + 4,       o.y + 8, 2, o.h - 8);
+        ctx.fillRect(o.x + o.w - 6, o.y + 10, 2, o.h - 10);
+        ctx.fillRect(o.x + o.w / 2, o.y + 6, 2, o.h - 6);
+        // thorn dots (dense)
+        for (let r = o.y + 4; r < o.y + o.h - 2; r += 3) {
+          for (let cc = o.x + 3; cc < o.x + o.w - 3; cc += 3) {
+            ctx.fillRect(cc, r, 1, 1);
+          }
+        }
+        // tiny flower accents
+        ctx.fillStyle = flower;
+        ctx.fillRect(o.x + 3, o.y + 3, 2, 2);
+        ctx.fillRect(o.x + o.w - 6, o.y + 2, 2, 2);
+        break;
+      }
+
+      case 5: {
+        // --- triple-spire: three cacti of graded heights with a sharp peak
+        const cols = [
+          { x: o.x + 2,          h: o.h - 12, w: 10 },
+          { x: o.x + 16,         h: o.h,      w: 12 },
+          { x: o.x + o.w - 14,   h: o.h - 6,  w: 12 },
+        ];
+        for (const c of cols) {
+          ctx.fillStyle = skin;
+          ctx.fillRect(c.x, o.y + (o.h - c.h), c.w, c.h);
+          ctx.fillStyle = dark;
+          ctx.fillRect(c.x + c.w - 2, o.y + (o.h - c.h), 2, c.h);
+          ctx.fillStyle = shade;
+          ctx.fillRect(c.x + 1, o.y + (o.h - c.h), 2, c.h);
+          // spikes
+          ctx.fillStyle = dark;
+          for (let r = o.y + (o.h - c.h) + 3; r < o.y + o.h - 2; r += 4) {
+            ctx.fillRect(c.x + 2,          r, 1, 1);
+            ctx.fillRect(c.x + c.w - 3, r, 1, 1);
+          }
+          // flower on tallest only
+          if (c.h === o.h) {
+            ctx.fillStyle = flower;
+            ctx.fillRect(c.x + 2, o.y - 1, c.w - 4, 3);
+            ctx.fillRect(c.x + c.w/2 - 1, o.y - 3, 2, 2);
+          }
+        }
+        break;
+      }
+    }
+
+    // Solid base line so all cacti anchor to the ground cleanly
+    ctx.fillStyle = dark;
+    ctx.fillRect(o.x, o.y + o.h - 2, o.w, 2);
+  }
+
+  _drawBird(o) {
+    const body    = css('--bird');
+    const outline = css('--text');
+    ctx.fillStyle = body;
+    ctx.fillRect(o.x, o.y + 6, o.w, 10);
+    // head
+    ctx.fillRect(o.x + o.w - 8, o.y + 3, 10, 8);
+    // eye
+    ctx.fillStyle = outline;
+    ctx.fillRect(o.x + o.w - 3, o.y + 5, 2, 2);
+    // beak
+    ctx.fillStyle = css('--runner');
+    ctx.fillRect(o.x + o.w + 2, o.y + 7, 4, 3);
+    // wings — flap animation, two frames
+    ctx.fillStyle = body;
+    const flap = (o.ft % 30) < 15 ? -1 : 1;
+    if (flap === -1) {
+      // wing up
+      ctx.fillRect(o.x + 6, o.y - 4, 14, 6);
+    } else {
+      // wing down
+      ctx.fillRect(o.x + 6, o.y + 14, 14, 6);
+    }
+  }
+
+  _drawShield(p) {
+    if (p.taken) return;
+    const bob = Math.sin(p.ft * 0.10) * 3;
+    const x = p.x, y = p.y + bob;
+    const w = p.w, h = p.h;
+    const cx = x + w / 2;
+    const cy = y + h / 2;
+    const c1 = css('--shield');
+    const c2 = css('--shield-2');
+    const outline = css('--text');
+
+    ctx.save();
+    // outer halo pulse
+    const pulse = (Math.sin(p.ft * 0.15) + 1) * 0.5;
+    ctx.globalAlpha = 0.25 + pulse * 0.2;
+    ctx.fillStyle = c1;
+    ctx.beginPath();
+    ctx.arc(cx, cy, w / 2 + 4 + pulse * 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // shield body: rounded hexagonal badge
+    ctx.fillStyle = c1;
+    ctx.beginPath();
+    ctx.moveTo(cx,          y + 2);
+    ctx.lineTo(x + w - 2,   y + 6);
+    ctx.lineTo(x + w - 2,   y + h - 8);
+    ctx.lineTo(cx,          y + h - 2);
+    ctx.lineTo(x + 2,       y + h - 8);
+    ctx.lineTo(x + 2,       y + 6);
+    ctx.closePath();
+    ctx.fill();
+
+    // inner panel — lighter
+    ctx.fillStyle = c2;
+    ctx.beginPath();
+    ctx.moveTo(cx,          y + 5);
+    ctx.lineTo(x + w - 5,   y + 8);
+    ctx.lineTo(x + w - 5,   y + h - 10);
+    ctx.lineTo(cx,          y + h - 5);
+    ctx.lineTo(x + 5,       y + h - 10);
+    ctx.lineTo(x + 5,       y + 8);
+    ctx.closePath();
+    ctx.fill();
+
+    // center cross emblem
+    ctx.fillStyle = c1;
+    ctx.fillRect(cx - 1, y + 8,     3, h - 16);
+    ctx.fillRect(x + 7,  cy - 1,    w - 14, 3);
+
+    // outline
+    ctx.strokeStyle = outline;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cx,          y + 2);
+    ctx.lineTo(x + w - 2,   y + 6);
+    ctx.lineTo(x + w - 2,   y + h - 8);
+    ctx.lineTo(cx,          y + h - 2);
+    ctx.lineTo(x + 2,       y + h - 8);
+    ctx.lineTo(x + 2,       y + 6);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  _drawCoin(p) {
+    if (p.taken) return;
+    const bob = Math.sin(p.ft * 0.14) * 2;
+    const x = p.x, y = p.y + bob;
+    const w = p.w, h = p.h;
+    const cx = x + w / 2;
+    const cy = y + h / 2;
+    const c1 = css('--coin');
+    const c2 = css('--coin-2');
+    const c3 = css('--coin-3');
+    const outline = css('--text');
+
+    // Coin spins — we fake a 3D rotation by squeezing the horizontal
+    // radius as a function of the frame counter.
+    const phase = (p.ft * 0.16) % (Math.PI * 2);
+    const rx = Math.max(2, Math.abs(Math.cos(phase)) * (w / 2));
+    const ry = h / 2;
+    const facing = Math.cos(phase) >= 0;   // true = face visible
+
+    ctx.save();
+    // halo
+    ctx.globalAlpha = 0.25;
+    ctx.fillStyle = c1;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, w / 2 + 3, h / 2 + 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // Outer rim
+    ctx.fillStyle = c2;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Inner face
+    ctx.fillStyle = c1;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, Math.max(1, rx - 2), ry - 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    if (facing && rx > 4) {
+      // Engraved star on the coin face
+      ctx.fillStyle = c2;
+      ctx.fillRect(cx - 1, cy - 5, 2, 10);
+      ctx.fillRect(cx - 5, cy - 1, 10, 2);
+      ctx.fillStyle = c3;
+      ctx.fillRect(cx - 1, cy - 4, 2, 2);
+      ctx.fillRect(cx - 3, cy - 1, 2, 2);
+    }
+
+    // Outline
+    ctx.strokeStyle = outline;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+// ---------- Overlays ----------
+const { show: showOverlay, hideAll: hideAllOverlays } = createOverlayManager(
+  ['startScreen', 'pauseScreen', 'gameoverScreen']
+);
+
+// ---------- HUD ----------
+function updateHUD() {
+  const m = Math.floor(G.dist * METERS_PER_PX);
+  document.getElementById('hudDist').textContent  = pad(m, 4) + ' m';
+  document.getElementById('hudSpeed').textContent = (G.speed / 6).toFixed(1) + 'x';
+  document.getElementById('hudBest').textContent  = pad(G.hs, 4) + ' m';
+  document.getElementById('hudCoins').textContent = pad(G.coins, 3);
+  document.getElementById('hudLives').textContent =
+    '♥'.repeat(Math.max(0, G.lives)) || '—';
+  const s = document.getElementById('hudShield');
+  if (s) s.textContent = G.shield ? 'ACTIVE' : 'OFF';
+}
+
+function updateMuteLabel() {
+  const b = document.getElementById('muteBtnMenu');
+  if (b) b.textContent = audio.muted ? '♪ SOUND OFF' : '♪ SOUND ON';
+}
+
+// ---------- Init ----------
+const G = new Game();
+updateHUD();
+updateMuteLabel();
+showOverlay('startScreen');
+
+// ---------- Loop ----------
+function loop() {
+  G.update();
+  G.draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// ---------- Input wiring ----------
+window.addEventListener('keydown', e => {
+  if (['Space','ArrowUp','ArrowDown','KeyP','KeyM'].includes(e.code)) e.preventDefault();
+  G.key(e, true);
+});
+window.addEventListener('keyup', e => { G.key(e, false); });
+
+// ---------- Buttons ----------
+document.getElementById('startBtn').addEventListener('click', () => { G.start(); });
+document.getElementById('retryBtn').addEventListener('click', () => { G.start(); });
+document.getElementById('resumeBtn').addEventListener('click', () => {
+  G.state = 'playing'; hideAllOverlays();
+});
+document.getElementById('restartBtnPause').addEventListener('click', () => { G.start(); });
+document.getElementById('muteBtnMenu').addEventListener('click', () => {
+  audio.toggle(); updateMuteLabel();
+});
+
+// ---------- Touch controls ----------
+const tJump = document.getElementById('tJump');
+const tDuck = document.getElementById('tDuck');
+if (tJump) {
+  tJump.addEventListener('touchstart', e => { e.preventDefault(); initAudio(); if (G.state === 'menu' || G.state === 'gameover') G.start(); else G.jump(); });
+  tJump.addEventListener('mousedown',  e => { e.preventDefault(); initAudio(); if (G.state === 'menu' || G.state === 'gameover') G.start(); else G.jump(); });
+}
+if (tDuck) {
+  tDuck.addEventListener('touchstart', e => { e.preventDefault(); G.duck(); });
+  tDuck.addEventListener('touchend',   e => { e.preventDefault(); G.ducking = false; });
+  tDuck.addEventListener('mousedown',  e => { e.preventDefault(); G.duck(); });
+  tDuck.addEventListener('mouseup',    e => { e.preventDefault(); G.ducking = false; });
+}
+
+// ---------- Canvas fitting ----------
+fitCanvas(cvs, '.stage');
+
+// Re-read palette + HUD when theme changes
+Arcade.onPaletteChange(() => updateHUD());
+
+})();
+</script>
+</body>
+</html>

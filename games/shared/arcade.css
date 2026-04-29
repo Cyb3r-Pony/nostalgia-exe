@@ -1,0 +1,378 @@
+/* ============================================================
+   NOSTALGIA.EXE — Shared Arcade Chrome
+   Common CSS variables + chrome used by all games in the hub.
+   Game-specific colors (--brick-*, --ball, --paddle, etc.) are
+   defined inside each game's own <style> block so they can
+   diverge without touching shared code.
+   ============================================================ */
+
+:root {
+  --bg:            #0a0a10;
+  --bg-alt:        #111119;
+  --panel:         #14141e;
+  --panel-2:       #1b1b27;
+  --border:        #2a2a3a;
+  --text:          #e6e6f0;
+  --text-dim:      #8a8aa0;
+  --accent:        #4ea5ff;
+  --accent-2:      #00e5ff;
+  --accent-3:      #b388ff;
+  --accent-hot:    #ff4fa1;
+  --shadow-off:    #00e5ff;
+  --scan-opacity:  0.1;
+  --grid-line:     rgba(78, 165, 255, 0.06);
+}
+
+[data-theme="light"] {
+  --bg:            #f2ecd8;
+  --bg-alt:        #e7dfc4;
+  --panel:         #fffaee;
+  --panel-2:       #f7eeda;
+  --border:        #2a2a3a;
+  --text:          #1a1a28;
+  --text-dim:      #5a5a6a;
+  --accent:        #ff7aa8;
+  --accent-2:      #4ab8c8;
+  --accent-3:      #b8a5e8;
+  --accent-hot:    #ff9f6b;
+  --shadow-off:    #1a1a28;
+  --scan-opacity:  0.03;
+  --grid-line:     rgba(26, 26, 40, 0.05);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+body {
+  font-family: 'JetBrains Mono', monospace;
+  background: var(--bg);
+  color: var(--text);
+  transition: background 0.4s, color 0.4s;
+  position: relative;
+}
+
+/* ---------- Global overlays ---------- */
+.bg-grid {
+  position: fixed; inset: 0;
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+  mask-image: radial-gradient(ellipse at center, black 50%, transparent 95%);
+}
+.scanlines {
+  position: fixed; inset: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0,0,0,var(--scan-opacity)) 0 1px,
+    transparent 1px 3px
+  );
+  pointer-events: none;
+  z-index: 500;
+  mix-blend-mode: overlay;
+}
+[data-theme="light"] .scanlines { mix-blend-mode: multiply; }
+
+/* ---------- Top bar ---------- */
+.topbar {
+  position: fixed; top: 0; left: 0; right: 0;
+  z-index: 100;
+  padding: 10px 16px;
+  display: flex; justify-content: space-between; align-items: center;
+  background: color-mix(in srgb, var(--bg) 80%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+}
+.back {
+  display: inline-flex; align-items: center; gap: 10px;
+  color: var(--text); text-decoration: none;
+  font-size: 12px;
+  letter-spacing: 1px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  transition: all 0.2s;
+  text-transform: uppercase;
+}
+.back:hover {
+  border-color: var(--accent-2);
+  color: var(--accent-2);
+  box-shadow: 3px 3px 0 var(--shadow-off);
+  transform: translate(-1px,-1px);
+}
+
+.title-tag {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 12px;
+  color: var(--accent-2);
+  letter-spacing: 2px;
+}
+.title-tag .ver { color: var(--text-dim); font-size: 10px; margin-left: 10px; }
+
+.theme-toggle {
+  width: 60px; height: 26px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  position: relative;
+  cursor: pointer;
+  padding: 0;
+}
+.theme-toggle::after {
+  content: '';
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 20px; height: 20px;
+  background: var(--accent-2);
+  transition: transform 0.3s cubic-bezier(0.68,-0.55,0.27,1.55);
+  box-shadow: 2px 2px 0 var(--shadow-off);
+}
+[data-theme="light"] .theme-toggle::after { transform: translateX(34px); }
+
+/* ---------- HUD ---------- */
+.hud {
+  position: fixed;
+  top: 48px;
+  left: 0; right: 0;
+  padding: 8px 16px;
+  z-index: 60;
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 12px;
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+}
+.hud-col { display: flex; gap: 16px; align-items: center; }
+.hud-stat strong {
+  display: block;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 12px;
+  color: var(--text);
+  margin-top: 3px;
+  letter-spacing: 1px;
+}
+.hud-stat.score strong { color: var(--accent-2); }
+.hud-stat.best  strong { color: var(--accent-3); }
+.hud-stat.lives strong { color: var(--accent-hot); letter-spacing: 2px; }
+
+.powerup-stack { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.pu-badge {
+  min-width: 28px; height: 28px; padding: 0 6px;
+  border: 1px solid var(--text);
+  background: var(--panel);
+  display: grid; place-items: center;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 9px;
+  color: var(--accent-2);
+}
+.pu-badge.active {
+  background: var(--accent-2);
+  color: var(--bg);
+  box-shadow: 2px 2px 0 var(--text);
+}
+.pu-badge .lv { font-size: 7px; color: var(--text-dim); margin-left: 4px; }
+.pu-badge.active .lv { color: var(--bg); }
+
+/* ---------- Stage / canvas ---------- */
+.stage {
+  position: fixed;
+  top: 108px;
+  bottom: 48px;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+  padding: 8px;
+}
+canvas {
+  display: block;
+  background: var(--bg-alt);
+  border: 2px solid var(--text);
+  box-shadow:
+    6px 6px 0 var(--text),
+    inset 0 0 40px color-mix(in srgb, var(--accent-2) 6%, transparent);
+  image-rendering: pixelated;
+  touch-action: none;
+}
+
+/* ---------- Bottom bar ---------- */
+.bottombar {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  z-index: 60;
+  padding: 8px 16px;
+  display: flex; justify-content: space-between; align-items: center;
+  background: color-mix(in srgb, var(--bg) 80%, transparent);
+  backdrop-filter: blur(8px);
+  border-top: 1px solid var(--border);
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+  min-height: 40px;
+}
+.keys { display: flex; gap: 14px; flex-wrap: wrap; }
+kbd {
+  display: inline-block;
+  padding: 2px 8px;
+  border: 1px solid var(--text);
+  background: var(--panel);
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  margin-right: 4px;
+  box-shadow: 2px 2px 0 var(--text);
+}
+
+/* ---------- Overlays / cards ---------- */
+.overlay {
+  position: fixed; inset: 108px 0 48px 0;
+  display: grid; place-items: center;
+  z-index: 200;
+  padding: 20px;
+  background: color-mix(in srgb, var(--bg) 75%, transparent);
+  backdrop-filter: blur(4px);
+  overflow: auto;
+}
+.overlay.hidden { display: none; }
+.card {
+  background: var(--panel);
+  border: 2px solid var(--text);
+  box-shadow: 8px 8px 0 var(--accent-2);
+  padding: 32px;
+  max-width: 520px;
+  width: 100%;
+  text-align: center;
+  position: relative;
+}
+.card.wide { max-width: 920px; }
+.card-head {
+  display: flex; justify-content: space-between; align-items: center;
+  margin: -32px -32px 24px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--text);
+  background: var(--panel-2);
+  font-size: 10px;
+  color: var(--text-dim);
+}
+.dots { display: flex; gap: 5px; }
+.dots span { width: 10px; height: 10px; border: 1px solid var(--text); }
+.dots span:nth-child(1) { background: var(--accent-hot); }
+.dots span:nth-child(2) { background: var(--accent-2); }
+.dots span:nth-child(3) { background: var(--accent-3); }
+
+.card h1 {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 28px;
+  letter-spacing: -1px;
+  margin-bottom: 10px;
+  color: var(--accent-2);
+  text-shadow: 0 0 18px color-mix(in srgb, var(--accent-2) 60%, transparent);
+}
+.card h2 {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 20px;
+  margin-bottom: 16px;
+}
+.card p {
+  color: var(--text-dim);
+  margin-bottom: 20px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.card .stat-row {
+  display: flex; justify-content: space-around;
+  margin: 20px 0;
+  padding: 14px;
+  border: 1px dashed var(--border);
+}
+.card .stat-row div { font-size: 10px; color: var(--text-dim); letter-spacing: 1px; }
+.card .stat-row strong {
+  display: block;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 18px;
+  color: var(--accent-2);
+  margin-top: 6px;
+}
+/* Status line used by shared/scores.js to report public-scoreboard
+   submission state ("Posting…", "Posted", "Sign in to post", …).
+   The module sets the color per state; this rule handles layout only. */
+.card .score-status {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  min-height: 1.3em;
+  margin: 6px 0 10px;
+  opacity: 0.95;
+}
+.card .score-status[data-state="loading"]::after {
+  content: ' █';
+  animation: score-status-blink 0.9s steps(2, end) infinite;
+}
+@keyframes score-status-blink { 50% { opacity: 0; } }
+
+/* ---------- Buttons ---------- */
+.btn {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 14px 22px;
+  border: 2px solid var(--text);
+  background: var(--accent-2);
+  color: var(--bg);
+  cursor: pointer;
+  box-shadow: 5px 5px 0 var(--text);
+  text-decoration: none;
+  display: inline-flex; align-items: center; gap: 10px;
+  transition: transform 0.15s, box-shadow 0.15s;
+  margin: 4px;
+}
+.btn:hover { transform: translate(-2px,-2px); box-shadow: 7px 7px 0 var(--text); }
+.btn:active { transform: translate(2px,2px); box-shadow: 2px 2px 0 var(--text); }
+.btn.ghost { background: transparent; color: var(--text); box-shadow: 5px 5px 0 var(--border); }
+.btn.ghost:hover { box-shadow: 7px 7px 0 var(--border); }
+
+/* ---------- Touch controls ---------- */
+.touch {
+  position: fixed;
+  bottom: 48px; left: 0; right: 0;
+  z-index: 80;
+  display: none;
+  justify-content: space-between;
+  padding: 16px;
+  pointer-events: none;
+}
+.touch button {
+  pointer-events: auto;
+  width: 76px; height: 76px;
+  border: 2px solid var(--text);
+  background: color-mix(in srgb, var(--panel) 80%, transparent);
+  color: var(--accent-2);
+  font-family: 'Press Start 2P', monospace;
+  font-size: 20px;
+  cursor: pointer;
+  box-shadow: 4px 4px 0 var(--text);
+}
+.touch .right-cluster { display: flex; gap: 10px; }
+
+.blink { animation: blink 1s steps(2) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+
+::selection { background: var(--accent-2); color: var(--bg); }
+
+@media (max-width: 780px) {
+  .hud { font-size: 9px; padding: 6px 10px; }
+  .hud-stat strong { font-size: 10px; }
+  .keys { display: none; }
+  .card h1 { font-size: 20px; }
+  .card h2 { font-size: 16px; }
+  .touch { display: flex; }
+  .stage { bottom: 140px; }
+  .overlay { inset: 98px 0 140px 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

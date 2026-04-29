@@ -1,0 +1,1131 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>Signal Jam — Nostalgia.exe</title>
+<link rel="icon" type="image/svg+xml" href="../favicon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=Press+Start+2P&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="shared/arcade.css" />
+<style>
+  /* ==========================================================
+     SIGNAL JAM — circuit-board palette. The grid lines are very
+     dim purple so the routed signal trails (cyan / magenta /
+     yellow) glow against them without competing.
+     ========================================================== */
+  :root {
+    --grid-bg:     #0c0620;
+    --tile-bg:     #14082b;
+    --tile-bg-hi:  #1c0e3a;
+    --tile-line:   #382278;
+    --tile-glow:   #b388ff;
+    --tile-stroke: #2a1a6a;
+
+    --signal-1:    #5ff0c9;     /* cyan source */
+    --signal-2:    #ff4fa1;     /* magenta source */
+    --signal-3:    #ffd86b;     /* yellow source */
+
+    --source-glow: #ffa8d1;
+    --target-glow: #b5ffe6;
+
+    --overload:    #ff7a30;     /* warning amber */
+    --overload-hi: #ff4fa1;     /* danger pink */
+    --combo-glow:  #ffd86b;
+
+    --bg-deep:     #060218;
+    --grid-line:   #2a1a6a;
+    --star:        #6b5ab8;
+  }
+  [data-theme="light"] {
+    --grid-bg:     #d8c8e8;
+    --tile-bg:     #c8b4dc;
+    --tile-bg-hi:  #b8a0d0;
+    --tile-line:   #6e5890;
+    --tile-glow:   #4a3070;
+    --tile-stroke: #6e5890;
+
+    --signal-1:    #1aa88a;
+    --signal-2:    #c03a7a;
+    --signal-3:    #b88500;
+
+    --source-glow: #c03a7a;
+    --target-glow: #1aa88a;
+
+    --overload:    #c84810;
+    --overload-hi: #c03a7a;
+    --combo-glow:  #b88500;
+
+    --bg-deep:     #d8c8e8;
+    --grid-line:   #b8a0d0;
+    --star:        #6e5890;
+  }
+
+  canvas { max-width: 100%; max-height: 100%; image-rendering: pixelated; cursor: pointer; }
+
+  .controls-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 6px 14px;
+    margin: 18px 0 22px;
+    text-align: left;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .controls-grid kbd {
+    background: var(--panel-2);
+    border: 1px solid var(--text);
+    padding: 2px 6px;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 9px;
+    min-width: 44px;
+    text-align: center;
+  }
+
+  /* Signal-type legend on the start menu — same enlarged-icon
+     pattern used elsewhere so the colors read at a glance. */
+  .sig-legend {
+    display: grid;
+    grid-template-columns: 32px 1fr;
+    gap: 8px 14px;
+    align-items: center;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    margin-bottom: 22px;
+  }
+  .sig-legend span:nth-child(odd) {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 22px;
+    line-height: 1;
+    text-align: center;
+    text-shadow: 0 0 6px currentColor;
+  }
+</style>
+</head>
+<body>
+
+<div class="bg-grid"></div>
+<div class="scanlines"></div>
+
+<header class="topbar">
+  <a href="../index.html" class="back">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    EXIT
+  </a>
+  <div class="title-tag">SIGNAL JAM<span class="ver">v1.0.0 // ROUTE.EXE</span></div>
+  <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme"></button>
+</header>
+
+<section class="hud" id="hud">
+  <div class="hud-col">
+    <div class="hud-stat score">SCORE<strong id="hudScore">000000</strong></div>
+    <div class="hud-stat">TIME<strong id="hudTime">0.0s</strong></div>
+  </div>
+  <div class="hud-col">
+    <div class="hud-stat best">BEST<strong id="hudBest">000000</strong></div>
+    <div class="hud-stat">ROUTED<strong id="hudRouted">0</strong></div>
+  </div>
+  <div class="hud-col">
+    <div class="hud-stat">COMBO<strong id="hudCombo">×1</strong></div>
+    <div class="hud-stat" id="hudOverload">OVERLOAD<strong id="hudOverVal">0/6</strong></div>
+  </div>
+</section>
+
+<div class="stage">
+  <canvas id="game" width="600" height="400"></canvas>
+</div>
+
+<footer class="bottombar">
+  <div class="keys">
+    <span><kbd>CLICK</kbd> ROTATE TILE</span>
+    <span><kbd>P</kbd> PAUSE</span>
+    <span><kbd>M</kbd> MUTE</span>
+    <span><kbd>R</kbd> RESTART</span>
+  </div>
+  <div>© NOSTALGIA.EXE — <span class="blink">█</span></div>
+</footer>
+
+<!-- Start menu -->
+<div class="overlay" id="startScreen">
+  <div class="card">
+    <div class="card-head">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span>signal_jam.app</span>
+      <span>_ □ ×</span>
+    </div>
+    <h1>SIGNAL JAM</h1>
+    <p>Route the pulses. Click tiles to rotate them and steer each colored signal from its source on the left to the matching target on the right. You get a 5-second prep window before the first source goes live, then magenta and yellow come online over time. Six dropped signals and the network melts.</p>
+
+    <div class="controls-grid">
+      <kbd>CLICK</kbd><span>rotate the clicked tile 90° clockwise</span>
+      <kbd>R-CLICK</kbd><span>rotate counter-clockwise</span>
+      <kbd>TAP</kbd><span>same as click on touch</span>
+      <kbd>P</kbd><span>pause the network</span>
+    </div>
+
+    <div class="sig-legend">
+      <span style="color:var(--signal-1)">●</span><span>CYAN signals → cyan target (live at 5s)</span>
+      <span style="color:var(--signal-2)">●</span><span>MAGENTA signals → magenta target (live at 20s)</span>
+      <span style="color:var(--signal-3)">●</span><span>YELLOW signals → yellow target (live at 40s)</span>
+    </div>
+
+    <button class="btn" id="startBtn">▶ POWER UP</button>
+    <button class="btn ghost" id="muteBtnMenu">♪ SOUND ON</button>
+  </div>
+</div>
+
+<!-- Pause -->
+<div class="overlay hidden" id="pauseScreen">
+  <div class="card">
+    <div class="card-head">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span>pause.sys</span>
+      <span>_ □ ×</span>
+    </div>
+    <h2>PAUSED</h2>
+    <p>Network suspended.</p>
+    <button class="btn" id="resumeBtn">▶ RESUME</button>
+    <button class="btn ghost" id="restartBtnPause">↻ RESTART</button>
+  </div>
+</div>
+
+<!-- Game over -->
+<div class="overlay hidden" id="gameoverScreen">
+  <div class="card">
+    <div class="card-head">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span>overload.log</span>
+      <span>_ □ ×</span>
+    </div>
+    <h2 style="color:var(--accent-hot)">NETWORK OVERLOAD</h2>
+    <p>Too many lost packets. The board fried.</p>
+    <div class="stat-row">
+      <div>SCORE<strong id="finalScore">000000</strong></div>
+      <div>BEST<strong id="finalBest">000000</strong></div>
+      <div>ROUTED<strong id="finalRouted">0</strong></div>
+    </div>
+    <p id="newBestMsg" style="color:var(--accent-2);margin:4px 0 16px;display:none">✦ NEW BEST ✦</p>
+    <p id="scoreStatus" class="score-status" data-state="idle"></p>
+    <button class="btn" id="retryBtn">↻ RETRY</button>
+    <a href="../index.html" class="btn ghost">◀ EXIT</a>
+  </div>
+</div>
+
+<!-- Public scoreboard plumbing -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.105.1"></script>
+<script src="../shared/supabase-config.js"></script>
+<script src="../shared/auth.js"></script>
+<script src="../shared/scores.js"></script>
+
+<script src="shared/arcade.js"></script>
+<script>
+/* =============================================================
+   SIGNAL JAM — real-time circuit-routing puzzle.
+
+   GRID
+     8 cols × 4 rows of tiles. Each tile is one of:
+       'empty'    — no connections; signals entering it die
+       'straight' — N-S or E-W (rotation toggles)
+       'turn'     — 90° corner; rotation cycles N-E, E-S, S-W, W-N
+       'source'   — emits signals (off-grid edge)
+       'target'   — accepts matching color (off-grid edge)
+     Internal tiles randomize on game start. Click rotates 90° CW;
+     right-click rotates 90° CCW.
+
+   SIGNAL FLOW
+     Each signal has (col, row, t, fromSide, color, speed). Each
+     tick advances `t` along the tile's connection path. When `t`
+     crosses a halfway / 1.0 boundary, the signal queries the next
+     side via the tile's connection mask. If the next side is closed
+     (or the tile is empty), the signal dies and overload++.
+
+   OBJECTIVES
+     • Route signals to color-matched targets — that scores.
+     • Keep the overload meter under OVERLOAD_MAX or the run ends.
+     • Combo stacks for consecutive successful routes (cap ×5);
+       any failure resets it.
+
+   DIFFICULTY
+     • Spawn intervals shorten with elapsed time (BASE → MIN).
+     • Signal speed ramps from BASE to CAP.
+     • The yellow source unlocks at t = 35s.
+   ============================================================= */
+
+(() => {
+const cvs = document.getElementById('game');
+const ctx = cvs.getContext('2d');
+const W = cvs.width, H = cvs.height;
+
+// ---------- Utilities from shared module ----------
+const { clamp, rand, randInt, pad, color, createAudio, createOverlayManager,
+        wireThemeToggle, fitCanvas } = Arcade;
+
+// ---------- Theme + canvas ----------
+wireThemeToggle('themeToggle');
+fitCanvas(cvs, '.stage', 16);
+
+// ---------- Audio ----------
+const sfx = createAudio('sj.muted');
+function rotateSfx() { sfx.beep(420, 0.05, 'square',   0.05, 580); }
+function spawnSfx()  { sfx.beep(620, 0.04, 'triangle', 0.04, 760); }
+function deliverSfx(){ sfx.beep(980, 0.10, 'triangle', 0.09, 1480); }
+function failSfx()   { sfx.noise(0.10, 0.16); sfx.beep(140, 0.12, 'square', 0.10, 60); }
+function deathSfx()  { sfx.noise(0.4, 0.32); sfx.beep(80, 0.5, 'sawtooth', 0.22, 30); }
+
+// ---------- Overlays ----------
+const { show: showOverlay, hideAll: hideOverlays } =
+  createOverlayManager(['startScreen', 'pauseScreen', 'gameoverScreen']);
+
+// ---------- HUD elements ----------
+const hudScore   = document.getElementById('hudScore');
+const hudTime    = document.getElementById('hudTime');
+const hudBest    = document.getElementById('hudBest');
+const hudRouted  = document.getElementById('hudRouted');
+const hudCombo   = document.getElementById('hudCombo');
+const hudOverVal = document.getElementById('hudOverVal');
+
+// ---------- Grid geometry ----------
+const COLS = 8, ROWS = 4;
+const TILE = 60;
+const GRID_X = (W - COLS * TILE) / 2;          // centered horizontally
+const GRID_Y = 60;                              // top margin
+
+// Side encoding: 0=N, 1=E, 2=S, 3=W
+const N = 0, E = 1, S = 2, WS = 3;
+const DIRS = [
+  { dx:  0, dy: -1 },     // N
+  { dx:  1, dy:  0 },     // E
+  { dx:  0, dy:  1 },     // S
+  { dx: -1, dy:  0 },     // W
+];
+function opposite(side) { return (side + 2) % 4; }
+
+// Connection masks per tile-type per rotation. Bit i = side i open.
+// straight at rot 0: N-S; rot 1: E-W; rot 2/3 same as 0/1.
+// turn at rot 0: N+E; rot 1: E+S; rot 2: S+W; rot 3: W+N.
+const CONN = {
+  empty:    [0,           0,           0,           0          ],
+  straight: [0b0101, 0b1010, 0b0101, 0b1010],
+  turn:     [0b0011, 0b0110, 0b1100, 0b1001],
+};
+
+function tileMask(t) {
+  if (!t || !CONN[t.type]) return 0;
+  return CONN[t.type][t.rotation & 3];
+}
+function hasSide(mask, side) { return (mask & (1 << side)) !== 0; }
+
+// Signal speed: tiles per second (advancing `t` from 0 → 1 in 1/SPEED secs).
+const BASE_SPEED = 0.85;        // tiles/sec
+const SPEED_RAMP = 0.011;       // per second elapsed
+const SPEED_CAP  = 1.85;
+
+const BASE_SPAWN_INTERVAL = 2.6;
+const MIN_SPAWN_INTERVAL  = 0.9;
+const SPAWN_RAMP          = 0.022;
+
+const OVERLOAD_MAX = 6;
+const COMBO_CAP    = 5;
+const COMBO_BREAK_ON_FAIL = true;
+
+// Score values
+const SCORE_PER_DELIVER = 100;
+const SCORE_COMBO_STEP  = 25;     // bonus = combo * SCORE_COMBO_STEP
+
+// Signal radius (visual + collision approximation)
+const SIG_R = 6;
+
+// ---------- Source / target lanes ----------
+// Three source-target pairs on rows 0, 2, 1. They unlock progressively
+// so the player has time to align each row before the next color goes
+// live. Row 3 is the spare / decorative row.
+//
+//   t = 0..5      PREPARE — no signals; player rotates tiles
+//   t = 5         cyan source goes live
+//   t = 20        magenta source goes live
+//   t = 40        yellow source goes live
+//
+// First-spawn delay is added on top of activateAt so a freshly-active
+// source still gets a beat for the player to glance over before the
+// first packet appears.
+const PAIRS = [
+  { row: 0, color: '--signal-1', activateAt:  5, firstSpawn: 0.6 },
+  { row: 2, color: '--signal-2', activateAt: 20, firstSpawn: 0.6 },
+  { row: 1, color: '--signal-3', activateAt: 40, firstSpawn: 0.6 },
+];
+// Source rows — used by buildGrid to know which rows must stay all-
+// straight (so every game is rotation-solvable end-to-end).
+const SOURCE_ROWS = new Set(PAIRS.map(p => p.row));
+const FIRST_ACTIVATE = Math.min(...PAIRS.map(p => p.activateAt));
+
+// ---------- State ----------
+const state = {
+  mode:      'menu',
+  elapsed:   0,
+  speed:     BASE_SPEED,
+
+  grid:      [],            // 2-D array of tiles
+  signals:   [],            // active signals
+  particles: [],            // FX
+
+  pairs: PAIRS.map(p => ({ ...p })),
+
+  // Absolute world-time of the next spawn per pair. Initialized to
+  // activateAt + firstSpawn so the source has its grace before its
+  // first packet, then advances by `interval` after each spawn.
+  nextSpawn: PAIRS.map(p => p.activateAt + p.firstSpawn),
+
+  routed:    0,
+  failed:    0,
+  combo:     1,
+  score:     0,
+  best:      Number(localStorage.getItem('sj.best') || 0),
+
+  shakeT:    0,
+  flashT:    0,
+};
+
+// ---------- Grid setup ----------
+function newTile(type, rotation = 0) {
+  return { type, rotation, anim: 0 };       // anim = 0..1 ease for rotate vis
+}
+
+function isValidTile(t) {
+  return t && (t.type === 'straight' || t.type === 'turn' || t.type === 'empty');
+}
+
+function buildGrid() {
+  // Guaranteed-solvable layout: every row that hosts a source/target
+  // pair is filled with `straight` tiles and only the rotation is
+  // randomized. That means the player always has a valid solution —
+  // rotate every tile in their active row to the E-W orientation —
+  // and no run is ever born "doomed" with an unconnectable source.
+  //
+  // Rows that aren't source rows (currently row 3) are decorative
+  // filler with random straight/turn/empty tiles. Signals never enter
+  // those rows, so their content can't affect solvability.
+  state.grid = [];
+  for (let r = 0; r < ROWS; r++) {
+    const row = [];
+    for (let c = 0; c < COLS; c++) {
+      if (SOURCE_ROWS.has(r)) {
+        // Always straight, scrambled rotation — rotation 1 (E-W) is
+        // the winning state; the player rotates each tile to it.
+        row.push(newTile('straight', randInt(0, 3)));
+      } else {
+        const roll = Math.random();
+        let type;
+        if      (roll < 0.10) type = 'empty';
+        else if (roll < 0.45) type = 'turn';
+        else                  type = 'straight';
+        row.push(newTile(type, randInt(0, 3)));
+      }
+    }
+    state.grid.push(row);
+  }
+}
+
+// ---------- Reset ----------
+function resetState() {
+  state.mode    = 'playing';
+  state.elapsed = 0;
+  state.speed   = BASE_SPEED;
+  state.signals.length   = 0;
+  state.particles.length = 0;
+  state.routed  = 0;
+  state.failed  = 0;
+  state.combo   = 1;
+  state.score   = 0;
+  state.shakeT  = 0;
+  state.flashT  = 0;
+  state.nextSpawn = PAIRS.map(p => p.activateAt + p.firstSpawn);
+  buildGrid();
+  updateHUD();
+}
+
+// ---------- Input ----------
+// Convert canvas-relative click to (col, row); returns null if off-grid.
+function pickTile(cx, cy) {
+  const col = Math.floor((cx - GRID_X) / TILE);
+  const row = Math.floor((cy - GRID_Y) / TILE);
+  if (col < 0 || col >= COLS || row < 0 || row >= ROWS) return null;
+  return { col, row };
+}
+
+function rotateTile(col, row, dir) {
+  const t = state.grid[row][col];
+  if (!isValidTile(t) || t.type === 'empty') return;
+  t.rotation = (t.rotation + (dir > 0 ? 1 : 3)) & 3;
+  t.anim = 1;
+  rotateSfx();
+}
+
+function canvasPos(e) {
+  const rect = cvs.getBoundingClientRect();
+  const sx = cvs.width  / rect.width;
+  const sy = cvs.height / rect.height;
+  return {
+    x: (e.clientX - rect.left) * sx,
+    y: (e.clientY - rect.top)  * sy,
+  };
+}
+
+cvs.addEventListener('mousedown', e => {
+  if (state.mode !== 'playing') return;
+  const { x, y } = canvasPos(e);
+  const hit = pickTile(x, y);
+  if (!hit) return;
+  rotateTile(hit.col, hit.row, e.button === 2 ? -1 : +1);
+  e.preventDefault();
+  sfx.init();
+});
+cvs.addEventListener('contextmenu', e => e.preventDefault());
+
+cvs.addEventListener('touchstart', e => {
+  if (state.mode !== 'playing' || !e.touches[0]) return;
+  const t = e.touches[0];
+  const { x, y } = canvasPos({ clientX: t.clientX, clientY: t.clientY });
+  const hit = pickTile(x, y);
+  if (!hit) return;
+  rotateTile(hit.col, hit.row, +1);
+  e.preventDefault();
+  sfx.init();
+}, { passive: false });
+
+addEventListener('keydown', e => {
+  const k = e.key;
+  const lk = k.toLowerCase();
+  if (k === ' ' || k === 'Spacebar' || k === 'Enter') {
+    if (state.mode === 'menu' || state.mode === 'gameover') startGame();
+    else if (state.mode === 'paused') { state.mode = 'playing'; hideOverlays(); }
+    e.preventDefault();
+  } else if (lk === 'p' && state.mode !== 'menu') {
+    if (state.mode === 'playing')      { state.mode = 'paused';  showOverlay('pauseScreen'); }
+    else if (state.mode === 'paused')  { state.mode = 'playing'; hideOverlays(); }
+  } else if (lk === 'm') {
+    const muted = sfx.toggle();
+    document.getElementById('muteBtnMenu').textContent = muted ? '♪ SOUND OFF' : '♪ SOUND ON';
+  } else if (lk === 'r' && state.mode !== 'menu') {
+    startGame();
+  }
+});
+
+// Buttons
+document.getElementById('startBtn').addEventListener('click', startGame);
+document.getElementById('retryBtn').addEventListener('click', startGame);
+document.getElementById('resumeBtn').addEventListener('click', () => {
+  state.mode = 'playing'; hideOverlays();
+});
+document.getElementById('restartBtnPause').addEventListener('click', startGame);
+document.getElementById('muteBtnMenu').addEventListener('click', () => {
+  const muted = sfx.toggle();
+  document.getElementById('muteBtnMenu').textContent = muted ? '♪ SOUND OFF' : '♪ SOUND ON';
+});
+
+// ---------- Lifecycle ----------
+function startGame() {
+  resetState();
+  hideOverlays();
+  last = performance.now();
+  sfx.init();
+}
+
+function endGame() {
+  if (state.mode === 'gameover') return;
+  state.mode = 'gameover';
+  const finalScore = Math.floor(state.score);
+  const isBest = finalScore > state.best;
+  if (isBest) {
+    state.best = finalScore;
+    localStorage.setItem('sj.best', String(finalScore));
+  }
+  document.getElementById('finalScore').textContent  = pad(finalScore, 6);
+  document.getElementById('finalBest').textContent   = pad(state.best, 6);
+  document.getElementById('finalRouted').textContent = String(state.routed);
+  document.getElementById('newBestMsg').style.display = isBest ? 'block' : 'none';
+  if (window.NostalgiaScores) {
+    window.NostalgiaScores.submitAndReport(
+      'signal-jam', finalScore, document.getElementById('scoreStatus')
+    );
+  }
+  showOverlay('gameoverScreen');
+  deathSfx();
+  state.shakeT = 0.5;
+  state.flashT = 0.4;
+}
+
+// ---------- Spawning ----------
+function spawnSignal(pairIdx) {
+  const pair = state.pairs[pairIdx];
+  // Source enters the leftmost tile from the W side (came from off-grid west).
+  state.signals.push({
+    col: 0,
+    row: pair.row,
+    t: 0,
+    fromSide: WS,           // entered from the west
+    pairIdx,
+    color: pair.color,
+    speed: state.speed,
+  });
+  spawnSfx();
+}
+
+// ---------- Update ----------
+function update(dt) {
+  if (state.mode !== 'playing') return;
+  state.elapsed += dt;
+
+  // Speed + spawn-rate ramps
+  state.speed = Math.min(SPEED_CAP, BASE_SPEED + state.elapsed * SPEED_RAMP);
+
+  // Per-pair spawn — `nextSpawn[i]` is an ABSOLUTE world-time, set
+  // initially to (activateAt + firstSpawn) so the source's grace is
+  // baked in. A pair only spawns once the elapsed clock has crossed
+  // its activation; after each spawn we schedule the next interval.
+  for (let i = 0; i < state.pairs.length; i++) {
+    const pair = state.pairs[i];
+    if (state.elapsed < pair.activateAt) continue;
+    if (state.elapsed >= state.nextSpawn[i]) {
+      spawnSignal(i);
+      const interval = clamp(BASE_SPAWN_INTERVAL - state.elapsed * SPAWN_RAMP,
+                             MIN_SPAWN_INTERVAL, BASE_SPAWN_INTERVAL);
+      state.nextSpawn[i] = state.elapsed + interval + rand(-0.2, 0.5);
+    }
+  }
+
+  // Tile rotate-anim ease
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const t = state.grid[r][c];
+      if (t.anim > 0) t.anim = Math.max(0, t.anim - dt * 5);
+    }
+  }
+
+  // ---- Signal advance ----
+  for (let i = state.signals.length - 1; i >= 0; i--) {
+    const s = state.signals[i];
+    s.t += state.speed * dt;
+    while (s.t >= 1.0) {
+      s.t -= 1.0;
+      // Determine the side this signal exited current tile (= side it
+      // enters next tile from the OPPOSITE direction).
+      const exitSide = computeExitSide(s);
+      if (exitSide === -1) {
+        failSignal(i, s);
+        continue;
+      }
+      // Step to next tile in `exitSide` direction.
+      const d = DIRS[exitSide];
+      const nc = s.col + d.dx;
+      const nr = s.row + d.dy;
+      // Off-grid east edge — check if it's a valid target.
+      if (nc >= COLS) {
+        deliverSignal(i, s);
+        continue;
+      }
+      if (nc < 0 || nr < 0 || nr >= ROWS) {
+        failSignal(i, s);
+        continue;
+      }
+      // Entering next tile from the OPPOSITE side of exitSide.
+      const enterSide = opposite(exitSide);
+      const nextTile = state.grid[nr][nc];
+      const nextMask = tileMask(nextTile);
+      if (!hasSide(nextMask, enterSide)) {
+        // Move signal to its dying tile so the FX render at the right spot.
+        s.col = nc; s.row = nr; s.fromSide = enterSide; s.t = 0.05;
+        failSignal(i, s);
+        continue;
+      }
+      s.col = nc;
+      s.row = nr;
+      s.fromSide = enterSide;
+    }
+  }
+
+  // ---- Particle updates ----
+  for (let i = state.particles.length - 1; i >= 0; i--) {
+    const p = state.particles[i];
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.vx *= 0.93;
+    p.vy *= 0.93;
+    p.life -= dt;
+    if (p.life <= 0) state.particles.splice(i, 1);
+  }
+
+  // Decay shake / flash
+  if (state.shakeT > 0) state.shakeT = Math.max(0, state.shakeT - dt);
+  if (state.flashT > 0) state.flashT = Math.max(0, state.flashT - dt);
+
+  // ---- Game-over check ----
+  if (state.failed >= OVERLOAD_MAX) endGame();
+
+  updateHUD();
+}
+
+// Compute the side the signal exits the current tile, given how it
+// entered. Returns -1 if no valid exit (dead end / wrong tile).
+function computeExitSide(s) {
+  const tile = state.grid[s.row][s.col];
+  const mask = tileMask(tile);
+  if (!hasSide(mask, s.fromSide)) return -1;
+  // Find any open side that ISN'T fromSide. For straight/turn there's
+  // exactly one — that's the unique exit.
+  for (let side = 0; side < 4; side++) {
+    if (side === s.fromSide) continue;
+    if (hasSide(mask, side)) return side;
+  }
+  return -1;
+}
+
+function failSignal(idx, s) {
+  state.signals.splice(idx, 1);
+  state.failed++;
+  if (COMBO_BREAK_ON_FAIL) state.combo = 1;
+  failSfx();
+  spawnFailBurst(s);
+  state.shakeT = Math.min(0.45, state.shakeT + 0.18);
+  state.flashT = Math.min(0.4, state.flashT + 0.22);
+}
+
+function deliverSignal(idx, s) {
+  // Match check — the signal's pair must align with the row's target.
+  const pair = state.pairs[s.pairIdx];
+  if (pair.row === s.row) {
+    state.signals.splice(idx, 1);
+    state.routed++;
+    state.score += SCORE_PER_DELIVER + state.combo * SCORE_COMBO_STEP;
+    state.combo = Math.min(COMBO_CAP, state.combo + 1);
+    deliverSfx();
+    spawnDeliverBurst(s, pair.color);
+  } else {
+    // Wrong target — penalize same as fail.
+    state.signals.splice(idx, 1);
+    state.failed++;
+    if (COMBO_BREAK_ON_FAIL) state.combo = 1;
+    failSfx();
+    spawnFailBurst(s);
+  }
+}
+
+function spawnFailBurst(s) {
+  const { x, y } = signalScreenPos(s);
+  for (let i = 0; i < 14; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const sp = rand(80, 220);
+    state.particles.push({
+      x, y,
+      vx: Math.cos(a) * sp,
+      vy: Math.sin(a) * sp,
+      life: 0.5, max: 0.5,
+      glyph: Math.random() < 0.5 ? '0' : '1',
+      color: '--overload-hi',
+    });
+  }
+}
+
+function spawnDeliverBurst(s, col) {
+  const { x, y } = signalScreenPos(s);
+  for (let i = 0; i < 12; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const sp = rand(60, 180);
+    state.particles.push({
+      x, y,
+      vx: Math.cos(a) * sp,
+      vy: Math.sin(a) * sp,
+      life: 0.45, max: 0.45,
+      glyph: Math.random() < 0.5 ? '0' : '1',
+      color: col,
+    });
+  }
+}
+
+// ---------- HUD ----------
+function updateHUD() {
+  hudScore.textContent  = pad(Math.floor(state.score), 6);
+  hudTime.textContent   = state.elapsed.toFixed(1) + 's';
+  hudBest.textContent   = pad(state.best, 6);
+  hudRouted.textContent = String(state.routed);
+  hudCombo.textContent  = '×' + state.combo;
+  hudOverVal.textContent = state.failed + '/' + OVERLOAD_MAX;
+  // Tint the overload label red as we approach the cap
+  const ratio = state.failed / OVERLOAD_MAX;
+  document.getElementById('hudOverload').style.color =
+    ratio >= 0.8 ? 'var(--overload-hi)' :
+    ratio >= 0.5 ? 'var(--overload)' :
+                   'var(--text-dim)';
+}
+
+// ---------- Geometry helpers ----------
+function tileCenter(col, row) {
+  return {
+    x: GRID_X + col * TILE + TILE / 2,
+    y: GRID_Y + row * TILE + TILE / 2,
+  };
+}
+
+function sideMidpoint(col, row, side) {
+  const cx = GRID_X + col * TILE + TILE / 2;
+  const cy = GRID_Y + row * TILE + TILE / 2;
+  const half = TILE / 2;
+  if (side === N)  return { x: cx,         y: cy - half };
+  if (side === E)  return { x: cx + half,  y: cy        };
+  if (side === S)  return { x: cx,         y: cy + half };
+  return            { x: cx - half,  y: cy        };
+}
+
+// Compute the on-screen (x, y) of a signal mid-flight through its
+// current tile. Splits the path into two halves: entry→center, then
+// center→exit. `t` is in [0, 1).
+function signalScreenPos(s) {
+  const tile = state.grid[s.row][s.col];
+  const center = tileCenter(s.col, s.row);
+  const entry  = sideMidpoint(s.col, s.row, s.fromSide);
+  // Determine exit side from current tile's mask and fromSide.
+  const mask = tileMask(tile);
+  let exitSide = -1;
+  for (let side = 0; side < 4; side++) {
+    if (side === s.fromSide) continue;
+    if (hasSide(mask, side)) { exitSide = side; break; }
+  }
+  if (exitSide === -1) {
+    // Dead-end mid-tile — return the center as "best guess" so the
+    // burst FX still fire on a sensible pixel.
+    return center;
+  }
+  const exitMid = sideMidpoint(s.col, s.row, exitSide);
+  if (s.t < 0.5) {
+    const k = s.t / 0.5;
+    return {
+      x: entry.x + (center.x - entry.x) * k,
+      y: entry.y + (center.y - entry.y) * k,
+    };
+  } else {
+    const k = (s.t - 0.5) / 0.5;
+    return {
+      x: center.x + (exitMid.x - center.x) * k,
+      y: center.y + (exitMid.y - center.y) * k,
+    };
+  }
+}
+
+// ---------- Render ----------
+function render() {
+  let shx = 0, shy = 0;
+  if (state.shakeT > 0) {
+    shx = (Math.random() - 0.5) * 6;
+    shy = (Math.random() - 0.5) * 4;
+  }
+  ctx.save();
+  ctx.translate(shx, shy);
+
+  drawBackground();
+  drawGrid();
+  drawSourcesTargets();
+  drawSignals();
+  drawParticles();
+  drawPrepare();
+  drawFlash();
+  drawScanlines();
+
+  ctx.restore();
+}
+
+// During the initial grace window — before any source has activated —
+// we paint a big PREPARE countdown over the grid so the player knows
+// exactly how long they have to align tiles before the first packet.
+// As soon as the first source activates, this disappears.
+function drawPrepare() {
+  if (state.elapsed >= FIRST_ACTIVATE) return;
+  const remaining = Math.max(0, FIRST_ACTIVATE - state.elapsed);
+  const cx = GRID_X + COLS * TILE / 2;
+  const cy = GRID_Y + ROWS * TILE / 2;
+  // Backdrop wash so big text reads against the busy grid below.
+  ctx.fillStyle = color('--bg-deep');
+  ctx.globalAlpha = 0.55;
+  ctx.fillRect(cx - 130, cy - 38, 260, 76);
+  ctx.globalAlpha = 1;
+
+  ctx.textAlign = 'center';
+  ctx.font = "20px 'Press Start 2P', monospace";
+  ctx.fillStyle = color('--combo-glow');
+  ctx.fillText('PREPARE', cx, cy - 6);
+  ctx.font = "22px 'Press Start 2P', monospace";
+  ctx.fillStyle = color('--signal-1');
+  ctx.fillText(remaining.toFixed(1) + 's', cx, cy + 28);
+
+  // Hint below
+  ctx.font = "9px 'Press Start 2P', monospace";
+  ctx.fillStyle = color('--text-dim') || '#888';
+  ctx.fillText('CLICK TILES TO ROTATE', cx, cy + 48);
+  ctx.textAlign = 'left';
+}
+
+function drawBackground() {
+  ctx.fillStyle = color('--bg-deep');
+  ctx.fillRect(0, 0, W, H);
+  // Subtle backdrop dots so the grid doesn't sit on a flat black void.
+  ctx.fillStyle = color('--star');
+  for (let i = 0; i < 40; i++) {
+    const seed = i * 53.13;
+    const x = (seed * 97) % W;
+    const y = (seed * 41) % H;
+    ctx.globalAlpha = 0.25 + (i % 5) * 0.08;
+    ctx.fillRect(x | 0, y | 0, i % 7 === 0 ? 2 : 1, 1);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawGrid() {
+  // Frame
+  ctx.fillStyle = color('--grid-bg');
+  ctx.fillRect(GRID_X - 4, GRID_Y - 4, COLS * TILE + 8, ROWS * TILE + 8);
+  ctx.strokeStyle = color('--tile-stroke');
+  ctx.lineWidth = 1;
+  ctx.strokeRect(GRID_X - 4, GRID_Y - 4, COLS * TILE + 8, ROWS * TILE + 8);
+
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) drawTile(c, r);
+  }
+}
+
+function drawTile(col, row) {
+  const t = state.grid[row][col];
+  const x = GRID_X + col * TILE;
+  const y = GRID_Y + row * TILE;
+  const cx = x + TILE / 2;
+  const cy = y + TILE / 2;
+
+  // Tile bg
+  ctx.fillStyle = color('--tile-bg');
+  ctx.fillRect(x + 1, y + 1, TILE - 2, TILE - 2);
+  // Subtle inner border
+  ctx.strokeStyle = color('--tile-stroke');
+  ctx.strokeRect(x + 1, y + 1, TILE - 2, TILE - 2);
+
+  // Connection lines
+  if (t.type === 'empty') {
+    // Crossed-out marker
+    ctx.strokeStyle = color('--tile-line');
+    ctx.globalAlpha = 0.4;
+    ctx.beginPath();
+    ctx.moveTo(cx - 8, cy - 8);
+    ctx.lineTo(cx + 8, cy + 8);
+    ctx.moveTo(cx + 8, cy - 8);
+    ctx.lineTo(cx - 8, cy + 8);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    return;
+  }
+
+  // Apply rotation animation tween — slight scale-up during anim
+  const animScale = 1 + t.anim * 0.06;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(animScale, animScale);
+  ctx.translate(-cx, -cy);
+
+  const mask = tileMask(t);
+  ctx.strokeStyle = color('--tile-glow');
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
+
+  // Outer glow pass
+  ctx.globalAlpha = 0.25;
+  ctx.lineWidth = 10;
+  drawTileLines(cx, cy, mask);
+  ctx.globalAlpha = 1;
+
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = color('--tile-line');
+  drawTileLines(cx, cy, mask);
+
+  // Center node dot
+  ctx.fillStyle = color('--tile-glow');
+  ctx.fillRect(cx - 2, cy - 2, 4, 4);
+
+  ctx.restore();
+}
+
+function drawTileLines(cx, cy, mask) {
+  const half = TILE / 2;
+  ctx.beginPath();
+  if (hasSide(mask, N)) { ctx.moveTo(cx, cy); ctx.lineTo(cx, cy - half); }
+  if (hasSide(mask, E)) { ctx.moveTo(cx, cy); ctx.lineTo(cx + half, cy); }
+  if (hasSide(mask, S)) { ctx.moveTo(cx, cy); ctx.lineTo(cx, cy + half); }
+  if (hasSide(mask, WS)){ ctx.moveTo(cx, cy); ctx.lineTo(cx - half, cy); }
+  ctx.stroke();
+}
+
+function drawSourcesTargets() {
+  for (let i = 0; i < state.pairs.length; i++) {
+    const pair = state.pairs[i];
+    const col = color(pair.color);
+    const active = state.elapsed >= pair.activateAt;
+    // Source on the left edge — drawn at (-1, row)
+    const sx = GRID_X - TILE / 2;
+    const sy = GRID_Y + pair.row * TILE + TILE / 2;
+    drawSocket(sx, sy, col, active, 'source');
+    // Target on the right edge
+    const tx = GRID_X + COLS * TILE + TILE / 2;
+    const ty = GRID_Y + pair.row * TILE + TILE / 2;
+    drawSocket(tx, ty, col, active, 'target');
+    // For an inactive source, render a small "incoming" countdown
+    // beneath the socket so the player knows how soon it goes live.
+    if (!active) {
+      const remaining = pair.activateAt - state.elapsed;
+      ctx.font = "8px 'Press Start 2P', monospace";
+      ctx.fillStyle = color(pair.color);
+      ctx.globalAlpha = 0.7;
+      ctx.textAlign = 'center';
+      ctx.fillText('+' + remaining.toFixed(0) + 's', sx, sy + 28);
+      ctx.textAlign = 'left';
+      ctx.globalAlpha = 1;
+    }
+  }
+  // Also a faint label "OVERLOAD" + bar above the grid.
+  drawOverloadBar();
+}
+
+function drawSocket(cx, cy, col, active, kind) {
+  const r = 14;
+  ctx.globalAlpha = active ? 1 : 0.35;
+  // Halo
+  ctx.fillStyle = col;
+  ctx.globalAlpha *= 0.35;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r + 4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = active ? 1 : 0.45;
+  // Body
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+  // Inner cutout
+  ctx.fillStyle = color('--bg-deep');
+  ctx.beginPath();
+  ctx.arc(cx, cy, r - 4, 0, Math.PI * 2);
+  ctx.fill();
+  // Direction arrow (source points right, target points left = receiving)
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  if (kind === 'source') {
+    ctx.moveTo(cx - 4, cy - 5);
+    ctx.lineTo(cx + 4, cy);
+    ctx.lineTo(cx - 4, cy + 5);
+  } else {
+    ctx.moveTo(cx + 4, cy - 5);
+    ctx.lineTo(cx - 4, cy);
+    ctx.lineTo(cx + 4, cy + 5);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+function drawOverloadBar() {
+  const x = GRID_X;
+  const y = GRID_Y - 24;
+  const w = COLS * TILE;
+  const h = 8;
+  ctx.strokeStyle = color('--tile-stroke');
+  ctx.strokeRect(x, y, w, h);
+  const fillW = (state.failed / OVERLOAD_MAX) * w;
+  const ratio = state.failed / OVERLOAD_MAX;
+  ctx.fillStyle = color(ratio >= 0.8 ? '--overload-hi' : '--overload');
+  ctx.fillRect(x + 1, y + 1, Math.max(0, fillW - 2), h - 2);
+  // Tick marks per failure
+  ctx.strokeStyle = color('--tile-stroke');
+  ctx.beginPath();
+  for (let i = 1; i < OVERLOAD_MAX; i++) {
+    const tx = x + (w / OVERLOAD_MAX) * i;
+    ctx.moveTo(tx | 0, y);
+    ctx.lineTo(tx | 0, y + h);
+  }
+  ctx.stroke();
+  // Label
+  ctx.fillStyle = color('--text-dim') || '#888';
+  ctx.font = "8px 'Press Start 2P', monospace";
+  ctx.textBaseline = 'bottom';
+  ctx.fillText('OVERLOAD', x, y - 3);
+  ctx.textBaseline = 'top';
+}
+
+function drawSignals() {
+  for (const s of state.signals) {
+    const { x, y } = signalScreenPos(s);
+    const col = color(s.color);
+    // Trail — short tail behind the signal (rough heuristic toward
+    // the entry side).
+    const entry = sideMidpoint(s.col, s.row, s.fromSide);
+    ctx.globalAlpha = 0.45;
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(entry.x, entry.y);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    // Body
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.arc(x, y, SIG_R + 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(x, y, SIG_R - 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawParticles() {
+  ctx.font = "9px 'JetBrains Mono', monospace";
+  ctx.textBaseline = 'top';
+  for (const p of state.particles) {
+    ctx.globalAlpha = Math.max(0, p.life / p.max);
+    ctx.fillStyle = color(p.color);
+    ctx.fillText(p.glyph, p.x, p.y);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawFlash() {
+  if (state.flashT <= 0) return;
+  const t = state.flashT / 0.4;
+  ctx.globalAlpha = t * 0.45;
+  ctx.fillStyle = color('--overload-hi');
+  ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = 1;
+}
+
+function drawScanlines() {
+  ctx.globalAlpha = 0.05;
+  ctx.fillStyle = '#ffffff';
+  for (let y = 0; y < H; y += 3) ctx.fillRect(0, y, W, 1);
+  ctx.globalAlpha = 1;
+}
+
+// ---------- Main loop ----------
+let last = performance.now();
+const MAX_DT = 1 / 30;
+function frame(now) {
+  let dt = (now - last) / 1000;
+  last = now;
+  if (dt > MAX_DT) dt = MAX_DT;
+  update(dt);
+  render();
+  requestAnimationFrame(frame);
+}
+
+resetState();
+state.mode = 'menu';
+showOverlay('startScreen');
+updateHUD();
+requestAnimationFrame(frame);
+
+})();
+</script>
+</body>
+</html>

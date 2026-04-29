@@ -1,0 +1,52 @@
+# =============================================================
+# NOSTALGIA.EXE — git ignore
+# Static site, no build step. Keep the repo clean of OS, editor,
+# and secret droppings.
+# =============================================================
+
+# macOS / Windows / Linux file-system droppings
+.DS_Store
+Thumbs.db
+desktop.ini
+.AppleDouble
+.LSOverride
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.history/
+
+# Local web-server droppings (if you `python3 -m http.server` etc.)
+*.pid
+*.log
+
+# Node toolchain (none today, future-proof)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json.bak
+
+# Secrets — NEVER commit any of these
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.cer
+secrets.*
+*service_role*
+*service-role*
+
+# Supabase CLI (in case you start using it)
+.supabase/
+supabase/.temp/
+
+# Build / temp output
+dist/
+build/
+.cache/
+tmp/

@@ -1,0 +1,382 @@
+/* =============================================================
+   NOSTALGIA.EXE — Auth UI styling
+   -------------------------------------------------------------
+   Uses the theme tokens declared in the host page (--bg, --panel,
+   --border, --text, --text-dim, --accent, --accent-2, --accent-3,
+   --accent-hot, --shadow-off). Dark/light theme switching is
+   entirely driven by those vars — no overrides needed here.
+   ============================================================= */
+
+/* ---------- Auth trigger button (in the header) ---------- */
+.auth-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s, background 0.2s;
+}
+.auth-trigger:hover {
+  border-color: var(--accent-2);
+  color: var(--accent-2);
+}
+.auth-trigger[data-state="signed-in"] {
+  color: var(--accent-2);
+  border-color: var(--accent-2);
+}
+.auth-trigger .dot {
+  width: 6px; height: 6px;
+  background: var(--accent-hot);
+  border-radius: 50%;
+  box-shadow: 0 0 6px var(--accent-hot);
+}
+.auth-trigger[data-state="signed-in"] .dot { background: var(--accent-2); box-shadow: 0 0 6px var(--accent-2); }
+.auth-trigger[data-state="loading"] .dot { opacity: 0.4; animation: auth-pulse 1.2s infinite; }
+@keyframes auth-pulse {
+  0%, 100% { opacity: 0.4; } 50% { opacity: 1; }
+}
+
+/* ---------- Modal backdrop + container ---------- */
+.auth-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(10, 10, 16, 0.78);
+  backdrop-filter: blur(6px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+[data-theme="light"] .auth-backdrop {
+  background: rgba(242, 236, 216, 0.82);
+}
+.auth-backdrop.open { display: flex; }
+
+.auth-modal {
+  width: 100%;
+  max-width: 420px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: 8px 8px 0 var(--shadow-off);
+  position: relative;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text);
+  animation: auth-rise 0.25s ease-out;
+}
+@keyframes auth-rise {
+  from { transform: translateY(12px); opacity: 0; }
+  to   { transform: translateY(0);     opacity: 1; }
+}
+
+.auth-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel-2);
+}
+.auth-modal-title {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+}
+.auth-modal-dots { display: flex; gap: 5px; }
+.auth-modal-dots span {
+  width: 10px; height: 10px;
+  background: var(--accent-hot);
+}
+.auth-modal-dots span:nth-child(2) { background: var(--accent-2); }
+.auth-modal-dots span:nth-child(3) { background: var(--accent-3); }
+
+.auth-modal-close {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  width: 22px; height: 22px;
+  display: inline-grid; place-items: center;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1;
+}
+.auth-modal-close:hover { color: var(--accent-hot); border-color: var(--accent-hot); }
+.auth-modal.locked .auth-modal-close { display: none; }
+
+/* ---------- Tabs ---------- */
+.auth-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-bottom: 1px solid var(--border);
+}
+.auth-tab {
+  appearance: none;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 14px 10px;
+  color: var(--text-dim);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s;
+}
+.auth-tab:hover { color: var(--text); }
+.auth-tab.active {
+  color: var(--accent-2);
+  border-bottom-color: var(--accent-2);
+}
+.auth-modal.locked .auth-tabs { display: none; }
+
+/* ---------- Panel content ---------- */
+.auth-panel {
+  padding: 22px 22px 24px;
+  display: none;
+}
+.auth-panel.active { display: block; }
+.auth-panel h2 {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 14px;
+  margin-bottom: 6px;
+  color: var(--text);
+}
+.auth-panel p.auth-blurb {
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.5;
+  margin-bottom: 18px;
+}
+
+/* ---------- Form fields ---------- */
+.auth-field { display: block; margin-bottom: 14px; }
+.auth-field-label {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+.auth-input {
+  width: 100%;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 11px 12px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+.auth-input:focus {
+  border-color: var(--accent-2);
+  background: var(--panel-2);
+}
+.auth-input::placeholder { color: var(--text-dim); opacity: 0.6; }
+.auth-input.invalid { border-color: var(--accent-hot); }
+
+.auth-hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.auth-hint.error { color: var(--accent-hot); }
+.auth-hint.ok    { color: var(--accent-2); }
+
+/* ---------- Buttons ---------- */
+.auth-submit {
+  width: 100%;
+  padding: 12px 14px;
+  margin-top: 8px;
+  background: var(--accent-2);
+  color: var(--bg);
+  border: none;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 11px;
+  letter-spacing: 1px;
+  cursor: pointer;
+  box-shadow: 4px 4px 0 var(--shadow-off);
+  transition: transform 0.1s, box-shadow 0.1s, opacity 0.15s;
+}
+.auth-submit:hover:not(:disabled) {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0 var(--shadow-off);
+}
+.auth-submit:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 var(--shadow-off);
+}
+.auth-submit:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: 2px 2px 0 var(--shadow-off);
+}
+
+.auth-secondary {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-dim);
+  padding: 10px 14px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  transition: color 0.15s, border-color 0.15s;
+}
+.auth-secondary:hover { color: var(--text); border-color: var(--text-dim); }
+
+/* ---------- "OR" divider between password form and OAuth button ---------- */
+/* Two flexed pseudo-rules + a small uppercase label. Inherits theme tokens
+   so light + dark modes both look balanced.                                  */
+.auth-or {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0 14px;
+  color: var(--text-dim);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+.auth-or::before,
+.auth-or::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* ---------- OAuth buttons (Google + GitHub) ---------- */
+/* Shared base: same retro/cyber language as .auth-submit (Press Start 2P,
+   chunky offset shadow, hover lift) so the modal stays visually
+   consistent. Each provider gets its own accent color so the user can
+   tell them apart at a glance:
+     • SIGN IN   → --accent-2  (cyan, primary action)
+     • Google    → --accent-3  (lavender / soft purple)
+     • GitHub    → --accent    (electric blue / soft pink in light mode)
+   Swap providers around freely — the markup just sets a class.            */
+.auth-oauth {
+  width: 100%;
+  padding: 12px 14px;
+  margin-top: 0;
+  color: var(--bg);
+  border: none;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 11px;
+  letter-spacing: 1px;
+  cursor: pointer;
+  box-shadow: 4px 4px 0 var(--shadow-off);
+  transition: transform 0.1s, box-shadow 0.1s, opacity 0.15s;
+}
+.auth-oauth + .auth-oauth { margin-top: 10px; }
+.auth-oauth:hover:not(:disabled) {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0 var(--shadow-off);
+}
+.auth-oauth:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 var(--shadow-off);
+}
+.auth-oauth:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: 2px 2px 0 var(--shadow-off);
+}
+
+.auth-google { background: var(--accent-3); }
+.auth-github { background: var(--accent);   }
+
+/* ---------- Feedback / status banners ---------- */
+.auth-banner {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-alt);
+  font-size: 12px;
+  color: var(--text);
+  line-height: 1.45;
+  display: none;
+}
+.auth-banner.visible { display: block; }
+.auth-banner.success { border-color: var(--accent-2); color: var(--accent-2); }
+.auth-banner.error   { border-color: var(--accent-hot); color: var(--accent-hot); }
+
+/* ---------- Signed-in chip (in header) ---------- */
+.auth-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 10px 0 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  letter-spacing: 0.3px;
+}
+.auth-chip .chip-name {
+  color: var(--accent-2);
+  font-weight: 700;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.auth-chip .chip-signout {
+  appearance: none;
+  background: transparent;
+  color: var(--text-dim);
+  border: none;
+  border-left: 1px solid var(--border);
+  padding-left: 8px;
+  margin-left: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  transition: color 0.15s;
+}
+.auth-chip .chip-signout:hover { color: var(--accent-hot); }
+
+/* ---------- Username-setup specific ---------- */
+.auth-modal.locked .auth-modal-header { border-bottom-color: var(--accent-2); }
+.auth-username-rules {
+  margin: -6px 0 14px;
+  padding: 10px 12px;
+  border: 1px dashed var(--border);
+  background: var(--bg-alt);
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.55;
+}
+.auth-username-rules strong { color: var(--text); }
+
+/* ---------- Mobile ---------- */
+@media (max-width: 520px) {
+  .auth-modal { max-width: 100%; box-shadow: 6px 6px 0 var(--shadow-off); }
+  .auth-panel { padding: 18px; }
+  .auth-chip .chip-name { max-width: 80px; }
+}
+
+/* ---------- Hide footer actions when locked (username-setup mode) ---------- */
+.auth-modal.locked .auth-panel[data-panel="signin"],
+.auth-modal.locked .auth-panel[data-panel="signup"] { display: none !important; }
+.auth-modal:not(.locked) .auth-panel[data-panel="username"] { display: none !important; }

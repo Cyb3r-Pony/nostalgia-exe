@@ -1,0 +1,1780 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>FLUX — Nostalgia.exe</title>
+<link rel="icon" type="image/svg+xml" href="../favicon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=Press+Start+2P&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="shared/arcade.css" />
+<style>
+  /* ==========================================================
+     FLUX — game-specific overrides. Shared chrome from arcade.css.
+     Palette leans into the purple / cyan Dashmetry look — tinted
+     against the site's magenta accent so it doesn't feel like a
+     standalone demo.
+     ========================================================== */
+  :root {
+    --cube-face:   #ff4fa1;   /* hot-pink data block face (matches --accent-hot) */
+    --cube-glow:   #ffa8d1;
+    --cube-dark:   #a8266a;
+    --ground:      #7a4fd6;   /* neon-violet ground slab (default grav) */
+    --ground-hi:   #b388ff;
+    --ground-flip: #d8a833;   /* warm amber when gravity is inverted */
+    --ground-flip-hi:#ffd86b;
+    --ceil:        #7a4fd6;   /* ceiling used in flipped zones */
+    --spike:       #5ff0c9;   /* neon mint spike */
+    --spike-hi:    #b5ffe6;
+    --pillar:      #4ea5ff;   /* cyan block */
+    --pillar-hi:   #a0d4ff;
+    --portal-down: #ff4fa1;
+    --portal-up:   #5ff0c9;
+    --grid-line:   #2a1a6a;
+    --bg-deep:     #0a0520;
+    --star:        #6b5ab8;
+    --trail:       #b388ff;
+    --trail-hot:   #ff4fa1;
+  }
+  [data-theme="light"] {
+    --cube-face:   #c03a7a;
+    --cube-glow:   #e879ae;
+    --cube-dark:   #7a2450;
+    --ground:      #6040a0;
+    --ground-hi:   #8565c2;
+    --ground-flip: #b08410;
+    --ground-flip-hi:#d8a830;
+    --ceil:        #6040a0;
+    --spike:       #1aa88a;
+    --spike-hi:    #5fd0b0;
+    --pillar:      #2f7cc8;
+    --pillar-hi:   #6ba8d8;
+    --portal-down: #c03a7a;
+    --portal-up:   #1aa88a;
+    --grid-line:   #c8b8e0;
+    --bg-deep:     #e0d0ee;
+    --star:        #a8a5c0;
+    --trail:       #7a58b0;
+    --trail-hot:   #c03a7a;
+  }
+
+  canvas { max-width: 100%; max-height: 100%; image-rendering: pixelated; }
+
+  .controls-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 6px 14px;
+    margin: 18px 0 14px;
+    text-align: left;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .controls-grid kbd {
+    background: var(--panel-2);
+    border: 1px solid var(--text);
+    padding: 2px 6px;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 9px;
+    min-width: 44px;
+    text-align: center;
+  }
+
+  /* Difficulty picker — two big neon chips. The joke from the
+     spec ("0 / 1 instead of easy/hard because bits") is the whole
+     point, so we lean into the retro-terminal look. */
+  .mode-picker {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin: 6px 0 18px;
+  }
+  .mode-chip {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    padding: 10px 8px;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 10px;
+    color: var(--text);
+    cursor: pointer;
+    transition: border-color 120ms, background 120ms, color 120ms;
+    line-height: 1.6;
+  }
+  .mode-chip:hover { border-color: var(--accent-2); }
+  .mode-chip[aria-pressed="true"] {
+    background: color-mix(in srgb, var(--accent-2) 18%, var(--panel));
+    border-color: var(--accent-2);
+    color: var(--accent-2);
+  }
+  .mode-chip .tier {
+    font-size: 22px;
+    display: block;
+    margin-bottom: 4px;
+    color: var(--accent-hot);
+  }
+  .mode-chip[aria-pressed="true"] .tier { color: var(--accent-2); }
+  .mode-chip .lbl {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-dim);
+    letter-spacing: 0.06em;
+  }
+  .mode-chip[aria-pressed="true"] .lbl { color: var(--text); }
+  /* Difficulty blurb under each chip — concise readable description
+     so the bit-joke labels (0 / 1) don't leave new players guessing. */
+  .mode-chip .desc {
+    display: block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    margin-top: 6px;
+    color: var(--text-dim);
+    letter-spacing: 0.04em;
+    line-height: 1.45;
+  }
+  .mode-chip[aria-pressed="true"] .desc { color: var(--text); }
+</style>
+</head>
+<body>
+
+<div class="bg-grid"></div>
+<div class="scanlines"></div>
+
+<header class="topbar">
+  <a href="../index.html" class="back">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    EXIT
+  </a>
+  <div class="title-tag">FLUX<span class="ver">v1.0.0 // RHYTHM.RUN</span></div>
+  <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme"></button>
+</header>
+
+<section class="hud" id="hud">
+  <div class="hud-col">
+    <div class="hud-stat score">SCORE<strong id="hudScore">000000</strong></div>
+    <div class="hud-stat">DIST<strong id="hudDist">0000m</strong></div>
+  </div>
+  <div class="hud-col">
+    <div class="hud-stat best">BEST<strong id="hudBest">000000</strong></div>
+    <div class="hud-stat">SPEED<strong id="hudSpeed">1.0x</strong></div>
+  </div>
+  <div class="hud-col">
+    <div class="hud-stat" id="hudMode">MODE<strong id="hudModeVal">0</strong></div>
+    <div class="hud-stat" id="hudGrav">GRAV<strong id="hudGravVal">↓</strong></div>
+  </div>
+</section>
+
+<div class="stage">
+  <canvas id="game" width="900" height="360"></canvas>
+</div>
+
+<footer class="bottombar">
+  <div class="keys">
+    <span><kbd>SPACE</kbd> / <kbd>↑</kbd> JUMP</span>
+    <span><kbd>P</kbd> PAUSE</span>
+    <span><kbd>M</kbd> MUTE</span>
+    <span><kbd>R</kbd> RESTART</span>
+  </div>
+  <div>© NOSTALGIA.EXE — <span class="blink">█</span></div>
+</footer>
+
+<div class="touch" id="touch">
+  <div class="right-cluster">
+    <button id="tJump" aria-label="Jump">▲</button>
+  </div>
+</div>
+
+<!-- Start menu -->
+<div class="overlay" id="startScreen">
+  <div class="card">
+    <div class="card-head">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span>flux.app</span>
+      <span>_ □ ×</span>
+    </div>
+    <h1>FLUX</h1>
+    <p>A data-block running the grid. Tap to jump — the beat dictates the obstacles. Miss once, restart. Welcome to the bit rush.</p>
+
+    <div class="controls-grid">
+      <kbd>SPACE</kbd><span>jump (tap, or hold to buffer next landing)</span>
+      <kbd>↑ / W</kbd><span>same — choose what your fingers like</span>
+      <kbd>TAP</kbd><span>tap anywhere on canvas (mobile)</span>
+      <kbd>P</kbd><span>pause</span>
+    </div>
+
+    <div class="mode-picker" role="radiogroup" aria-label="Difficulty">
+      <button class="mode-chip" id="mode0" role="radio" aria-pressed="true" type="button">
+        <span class="tier">0</span>
+        <span class="lbl">TRAINING BIT</span>
+        <span class="desc">EASY · steady tempo, no gravity flips</span>
+      </button>
+      <button class="mode-chip" id="mode1" role="radio" aria-pressed="false" type="button">
+        <span class="tier">1</span>
+        <span class="lbl">LIVE BIT</span>
+        <span class="desc">HARD · faster, denser, gravity inverts mid-run</span>
+      </button>
+    </div>
+
+    <button class="btn" id="startBtn">▶ ENTER GRID</button>
+    <button class="btn ghost" id="muteBtnMenu">♪ SOUND ON</button>
+  </div>
+</div>
+
+<!-- Pause -->
+<div class="overlay hidden" id="pauseScreen">
+  <div class="card">
+    <div class="card-head">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span>pause.sys</span>
+      <span>_ □ ×</span>
+    </div>
+    <h2>PAUSED</h2>
+    <p>Signal buffered.</p>
+    <button class="btn" id="resumeBtn">▶ RESUME</button>
+    <button class="btn ghost" id="restartBtnPause">↻ RESTART</button>
+  </div>
+</div>
+
+<!-- Game over -->
+<div class="overlay hidden" id="gameoverScreen">
+  <div class="card">
+    <div class="card-head">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span>signal_lost.log</span>
+      <span>_ □ ×</span>
+    </div>
+    <h2 style="color:var(--accent-hot)">FRAGMENTED</h2>
+    <p>The bit collapsed against a shard.</p>
+    <div class="stat-row">
+      <div>SCORE<strong id="finalScore">000000</strong></div>
+      <div>BEST<strong id="finalBest">000000</strong></div>
+      <div>DIST<strong id="finalDist">0000m</strong></div>
+    </div>
+    <p id="newBestMsg" style="color:var(--accent-2);margin:4px 0 16px;display:none">✦ NEW BEST ✦</p>
+    <p id="scoreStatus" class="score-status" data-state="idle"></p>
+    <button class="btn" id="retryBtn">↻ RETRY</button>
+    <a href="../index.html" class="btn ghost">◀ EXIT</a>
+  </div>
+</div>
+
+<!-- Public scoreboard plumbing -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.105.1"></script>
+<script src="../shared/supabase-config.js"></script>
+<script src="../shared/auth.js"></script>
+<script src="../shared/scores.js"></script>
+
+<script src="shared/arcade.js"></script>
+<script>
+/* =============================================================
+   FLUX — a bite-sized Geometry-Dash clone, neon-cyber themed.
+
+   CORE LOOP
+     • Cube auto-moves right at a constant world speed.
+     • One input (SPACE / ↑ / W / click / tap) jumps.
+     • One-hit failure — any obstacle collision ends the run.
+     • Score = distance survived (meters). Submits on death.
+
+   OBSTACLE VOCABULARY
+     • spike        triangular ground/ceiling hazard
+     • pillar       solid block, must be jumped over (or landed on)
+     • portal-down  flips gravity downward (default state)
+     • portal-up    flips gravity upward (ceiling run)
+     • saw          optional late-game rotating disc hazard
+
+   RHYTHM
+     The world is divided into "bars" of BEATS_PER_BAR beats. At
+     the start of each bar a pattern is rolled from a difficulty-
+     gated catalogue and its obstacles are placed at fixed beat
+     offsets inside the bar. This makes obstacle spacing feel
+     musical without wiring up real audio.
+
+   MODES
+     • 0  TRAINING BIT — slower world, simpler patterns, no flips
+     • 1  LIVE BIT     — faster, denser patterns; flux fields
+                          auto-invert gravity every 500–1000 m
+     Per spec §12 the difficulty labels are literal bits (0/1).
+
+   All palette lookups use Arcade.color() (cached) — no per-frame
+   getComputedStyle.
+   ============================================================= */
+
+(() => {
+const cvs = document.getElementById('game');
+const ctx = cvs.getContext('2d');
+const W = cvs.width, H = cvs.height;
+
+// ---------- Utilities from shared module ----------
+const { clamp, rand, randInt, pad, color, createAudio, createOverlayManager,
+        wireThemeToggle, fitCanvas } = Arcade;
+
+// ---------- Theme ----------
+wireThemeToggle('themeToggle');
+fitCanvas(cvs, '.stage', 16);
+
+// ---------- Audio ----------
+const sfx = createAudio('flux.muted');
+function jumpSfx()   { sfx.beep(720, 0.08, 'square',   0.05, 520); }
+function landSfx()   { sfx.beep(280, 0.05, 'triangle', 0.04); }
+function deathSfx()  { sfx.noise(0.18, 0.26); sfx.beep(160, 0.26, 'sawtooth', 0.18, 70); }
+function portalSfx() { sfx.beep(960, 0.14, 'sine',     0.07, 1600); }
+
+// ---------- Overlays ----------
+const { show: showOverlay, hideAll: hideOverlays } =
+  createOverlayManager(['startScreen', 'pauseScreen', 'gameoverScreen']);
+
+// ---------- HUD ----------
+const hudScore   = document.getElementById('hudScore');
+const hudDist    = document.getElementById('hudDist');
+const hudBest    = document.getElementById('hudBest');
+const hudSpeed   = document.getElementById('hudSpeed');
+const hudModeVal = document.getElementById('hudModeVal');
+const hudGravVal = document.getElementById('hudGravVal');
+
+// ---------- World constants ----------
+const GROUND_Y     = H - 40;      // top of ground slab
+const CEIL_Y       = 40;          // bottom of ceiling slab (used in flipped grav)
+const PLAY_MIN_Y   = CEIL_Y;
+const PLAY_MAX_Y   = GROUND_Y;
+const PLAY_H       = PLAY_MAX_Y - PLAY_MIN_Y;
+
+const PLAYER_X     = 180;         // fixed x of cube (world scrolls around it)
+const CUBE_SIZE    = 28;
+
+// Physics — GD uses a snappy, punchy jump. Strong gravity, brief air time.
+const GRAVITY      = 3000;        // px/s²
+const JUMP_VEL     = 880;         // px/s (magnitude; direction = -grav sign)
+const MAX_FALL     = 1800;
+const COYOTE_TIME  = 0.08;        // s after leaving ground where jump still works
+const JUMP_BUFFER  = 0.12;        // s before landing where queued jump triggers
+
+// Rhythm
+const BEAT_SEC     = 0.44;        // seconds per beat
+const BEATS_PER_BAR= 4;
+const BAR_SEC      = BEAT_SEC * BEATS_PER_BAR;
+
+// Score / distance
+//   1 "meter" of distance = METER_PX pixels of scroll.
+const METER_PX     = 20;
+const SCORE_PER_M  = 1;
+
+// ---------- Mode config ----------
+// Everything that varies between MODE 0 (training) and MODE 1 (live bit)
+// lives in one table so tuning is done in one place.
+//
+// `autoFlip` controls whether the world auto-spawns gravity-inversion
+// "flux fields" — vertical electronic barriers that flip the cube's
+// gravity when crossed. Flips are NOT collectible: the field spans
+// floor to ceiling and the cube can't avoid it. On mode 1 these
+// happen at random distance intervals (see `flipMinM` / `flipMaxM`).
+// Mode 0 stays grounded the whole run — easy mode promise.
+const MODES = {
+  0: {
+    label:     '0',
+    baseSpeed: 300,           // px/s world scroll
+    rampPerM:  0.08,          // +px/s per meter travelled
+    speedCap:  460,
+    autoFlip:  false,         // training mode: stays on the ground
+    patternTier: 0,           // which patterns are allowed (0 = simplest)
+  },
+  1: {
+    label:     '1',
+    baseSpeed: 420,
+    rampPerM:  0.11,
+    speedCap:  640,
+    autoFlip:  true,          // live bit: auto-flips at distance intervals
+    flipMinM:  500,           // shortest interval between flips (meters)
+    flipMaxM:  1000,          // longest interval — first flip lands in here
+    patternTier: 1,
+  },
+};
+let MODE = MODES[0];
+
+// ---------- State ----------
+const state = {
+  mode:      'menu',    // 'menu' | 'playing' | 'paused' | 'gameover'
+  elapsed:   0,
+  distance:  0,         // px scrolled since start
+  speed:     MODE.baseSpeed,
+
+  // Player
+  py:        0,         // y of cube's top-left
+  ppy:       0,         // previous-frame y (for continuous collision)
+  pvy:       0,         // vertical velocity
+  grav:      +1,        // +1 = down, -1 = up (ceiling run)
+  onSurface: true,      // true when grounded (or ceilinged in flip)
+  coyote:    0,         // coyote timer
+  buffer:    0,         // jump buffer timer
+  glitch:    0,         // cosmetic glitch offset decay
+
+  // Rotation — Geometry-Dash-style spin while airborne. Snaps back
+  // to 0 on landing so the cube reads as "right-side up" at rest.
+  rot:       0,         // current angle (rad)
+  rotVel:    0,         // angular velocity (rad/s) — non-zero only in air
+  squash:    0,         // 0..1 brief squash factor on landing (decays)
+
+  // Rhythm
+  barIdx:    0,         // which bar we're scheduling
+  nextBarDist: 0,       // distance (px) at which the next bar starts
+
+  // Predicted gravity at the *end* of all currently-scheduled bars.
+  // The bar scheduler reads this when picking patterns — a bar that
+  // sits inside an upside-down section gets ceiling-side patterns.
+  // Toggled every time we schedule a flux field.
+  scheduledGrav: +1,
+  // Meters at which the next flux field should be inserted (mode 1).
+  // Re-rolled every time a field is placed.
+  nextFieldDistM: Infinity,
+  // Whether the cube's center is currently over a dark-matter pit.
+  // Cached per-frame in update() so the surface clamp can let the
+  // cube fall through.
+  overPit:   false,
+
+  // World objects — all coordinates are WORLD x. Render pass
+  // translates to screen by subtracting state.distance.
+  obstacles: [],        // {kind, x, y, w, h, ...}
+  particles: [],
+
+  // Scoring
+  score:     0,
+  distM:     0,         // meters (floor(distance / METER_PX))
+  best:      Number(localStorage.getItem('flux.best') || 0),
+
+  // Input
+  jumpHeld:  false,
+};
+
+// ---------- Pattern catalogue ----------
+// Each pattern is a list of obstacles placed at beat offsets inside
+// the bar. `beat` is a number of beats from bar start; `y` is only
+// meaningful for non-ground obstacles (spike defaults to ground).
+//
+// `surface` indicates which orientation the pattern is authored for:
+//   'floor'   → cube is grounded (default; works in normal grav)
+//   'ceiling' → cube is on the ceiling (inverted grav sections)
+//   'both'    → trivial / surface-agnostic (e.g. breather)
+//
+// During inverted-grav phases the scheduler picks only ceiling/both
+// patterns so the obstacles match the surface the cube is riding on.
+//
+// tier 0 → always available
+// tier 1 → also allowed in LIVE BIT
+const PATTERNS = [
+  // ===== tier 0 (training) — readable, well-spaced =====
+  { id:'solo_spike',          tier:0, len:2, surface:'floor',
+    items:[ {beat:0, kind:'spike'} ] },
+
+  { id:'double_spike',        tier:0, len:3, surface:'floor',
+    items:[ {beat:0, kind:'spike'}, {beat:1, kind:'spike'} ] },
+
+  { id:'triple_spike',        tier:0, len:4, surface:'floor',
+    items:[ {beat:0, kind:'spike'}, {beat:1, kind:'spike'}, {beat:2, kind:'spike'} ] },
+
+  { id:'short_pillar',        tier:0, len:3, surface:'floor',
+    items:[ {beat:0, kind:'pillar', h:34} ] },
+
+  { id:'tall_pillar',         tier:0, len:3, surface:'floor',
+    items:[ {beat:0, kind:'pillar', h:54} ] },
+
+  { id:'spike_then_pillar',   tier:0, len:4, surface:'floor',
+    items:[ {beat:0, kind:'spike'}, {beat:2, kind:'pillar', h:42} ] },
+
+  { id:'pillar_then_spike',   tier:0, len:4, surface:'floor',
+    items:[ {beat:0, kind:'pillar', h:42}, {beat:2.5, kind:'spike'} ] },
+
+  { id:'breather',            tier:0, len:2, surface:'both', // empty — recover
+    items:[] },
+
+  { id:'wide_pillar',         tier:0, len:3, surface:'floor',
+    items:[ {beat:0, kind:'pillar', h:30, w:50} ] },
+
+  { id:'spike_pair_wide',     tier:0, len:4, surface:'floor',
+    items:[ {beat:0, kind:'spike'}, {beat:2, kind:'spike'} ] },
+
+  // Vertical bobber — gentle oscillation. Cube usually clears safely
+  // because period is long; pattern designer leans on the high phase.
+  { id:'mover_solo',          tier:0, len:4, surface:'floor',
+    items:[ {beat:0, kind:'mover', h:28, w:28, range:18, period:2.4, baseY:54} ] },
+
+  // Two bobbers spaced a beat apart — first one is in low phase
+  // when cube reaches it (forces a jump), second is in high phase.
+  { id:'mover_pair',          tier:0, len:5, surface:'floor',
+    items:[ {beat:0,   kind:'mover', h:28, w:28, range:20, period:2.0, baseY:50, phase:0},
+            {beat:2.5, kind:'mover', h:28, w:28, range:20, period:2.0, baseY:50, phase:Math.PI} ] },
+
+  // ===== tier 1 (live) — denser, more compound =====
+  { id:'four_spike',          tier:1, len:4, surface:'floor',
+    items:[ {beat:0, kind:'spike'}, {beat:1, kind:'spike'},
+            {beat:2, kind:'spike'}, {beat:3, kind:'spike'} ] },
+
+  { id:'spike_cluster',       tier:1, len:3, surface:'floor',
+    items:[ {beat:0, kind:'spike'}, {beat:0.5, kind:'spike'}, {beat:1, kind:'spike'} ] },
+
+  { id:'double_pillar',       tier:1, len:4, surface:'floor',
+    items:[ {beat:0, kind:'pillar', h:44}, {beat:2, kind:'pillar', h:44} ] },
+
+  { id:'zig',                 tier:1, len:4, surface:'floor',
+    items:[ {beat:0, kind:'spike'}, {beat:1.2, kind:'pillar', h:36},
+            {beat:2.8, kind:'spike'} ] },
+
+  { id:'staircase_up',        tier:1, len:5, surface:'floor',
+    items:[ {beat:0, kind:'pillar', h:28},
+            {beat:1.4, kind:'pillar', h:44},
+            {beat:2.8, kind:'pillar', h:60} ] },
+
+  { id:'staircase_down',      tier:1, len:5, surface:'floor',
+    items:[ {beat:0, kind:'pillar', h:60},
+            {beat:1.4, kind:'pillar', h:44},
+            {beat:2.8, kind:'pillar', h:28} ] },
+
+  { id:'capped_pillar',       tier:1, len:4, surface:'floor',
+    items:[ {beat:0, kind:'pillar', h:34},
+            {beat:0, kind:'spike-on', pillarH:34, ofs:0} ] },
+
+  { id:'pillar_gate',         tier:1, len:5, surface:'floor',
+    items:[ {beat:0,   kind:'pillar', h:60},
+            {beat:1.5, kind:'spike'},
+            {beat:3,   kind:'pillar', h:60} ] },
+
+  { id:'spike_run',           tier:1, len:5, surface:'floor',
+    items:[ {beat:0, kind:'spike'}, {beat:1, kind:'spike'},
+            {beat:2, kind:'spike'}, {beat:3, kind:'spike'},
+            {beat:4, kind:'spike'} ] },
+
+  { id:'spike_then_tall',     tier:1, len:5, surface:'floor',
+    items:[ {beat:0, kind:'spike'},
+            {beat:1.5, kind:'pillar', h:54} ] },
+
+  // Mover run — three bouncing blocks staggered phase-by-third so
+  // the player threads the high windows.
+  { id:'mover_run',           tier:1, len:6, surface:'floor',
+    items:[ {beat:0, kind:'mover', range:24, period:1.6, baseY:54, phase:0},
+            {beat:1.7, kind:'mover', range:24, period:1.6, baseY:54, phase:2.094},
+            {beat:3.4, kind:'mover', range:24, period:1.6, baseY:54, phase:4.188} ] },
+
+  // Toggle laser — horizontal beam at jump-arc height. Player must
+  // time their jump (over the spike below) to the OFF phase.
+  { id:'laser_with_spike',    tier:1, len:4, surface:'floor',
+    items:[ {beat:1, kind:'laser', h:5, w:80, y:60, period:0.9, dutyOn:0.45},
+            {beat:1, kind:'spike'} ] },
+
+  // Two staggered lasers — must clear two timing gates back-to-back.
+  { id:'laser_double',        tier:1, len:6, surface:'floor',
+    items:[ {beat:0,   kind:'laser', h:5, w:60, y:55, period:0.8, dutyOn:0.4},
+            {beat:0,   kind:'spike'},
+            {beat:3,   kind:'laser', h:5, w:60, y:55, period:0.8, dutyOn:0.4, phase:0.4},
+            {beat:3,   kind:'spike'} ] },
+
+  // Dark-matter pit — gap in the floor. Must jump fully across.
+  { id:'pit_solo',            tier:1, len:4, surface:'floor',
+    items:[ {beat:0.5, kind:'pit', w:70} ] },
+
+  // Pit with a spike on the far side — just enough room to land.
+  { id:'pit_then_spike',      tier:1, len:5, surface:'floor',
+    items:[ {beat:0,   kind:'pit', w:80},
+            {beat:2.5, kind:'spike'} ] },
+
+  // Wider pit — needs an aggressive jump.
+  { id:'pit_wide',            tier:1, len:5, surface:'floor',
+    items:[ {beat:0.5, kind:'pit', w:100} ] },
+
+  // Horizontal slider — block hugs the floor and shuttles left/right.
+  // Player times their jump for the moment the block is at the far
+  // end of its swing.
+  { id:'hmover_solo',         tier:1, len:4, surface:'floor',
+    items:[ {beat:1, kind:'mover', axis:'x', range:55,
+             period:1.7, w:34, h:24, phase:0} ] },
+
+  // Two horizontal sliders in counter-phase — gates that open and
+  // close. Threading both is a sustained timing gauntlet.
+  { id:'hmover_pair',         tier:1, len:6, surface:'floor',
+    items:[ {beat:0,   kind:'mover', axis:'x', range:50, period:1.6,
+             w:30, h:24, phase:0},
+            {beat:3,   kind:'mover', axis:'x', range:50, period:1.6,
+             w:30, h:24, phase:Math.PI} ] },
+
+  // Slider drifts in front of a spike — must jump over the spike
+  // while the slider's swung wide.
+  { id:'hmover_with_spike',   tier:1, len:5, surface:'floor',
+    items:[ {beat:0,   kind:'mover', axis:'x', range:60, period:1.8,
+             w:30, h:24, phase:Math.PI},
+            {beat:2.5, kind:'spike'} ] },
+
+  // Vertical laser — toggle wall. Walk through when off, jump over
+  // when on. Top is below jump apex so it's always clearable.
+  { id:'vlaser_solo',         tier:1, len:4, surface:'floor',
+    items:[ {beat:1, kind:'laser', orient:'v',
+             h:70, w:6, period:0.9, dutyOn:0.45} ] },
+
+  // Two vertical lasers spaced a couple beats apart with offset
+  // phases — different timing window per gate.
+  { id:'vlaser_double',       tier:1, len:6, surface:'floor',
+    items:[ {beat:0,   kind:'laser', orient:'v', h:70, w:6,
+             period:1.0, dutyOn:0.4},
+            {beat:3,   kind:'laser', orient:'v', h:70, w:6,
+             period:1.0, dutyOn:0.4, phase:0.5} ] },
+
+  // Vertical laser then a spike — once you've timed the laser jump,
+  // you immediately need another precise hop.
+  { id:'vlaser_spike',        tier:1, len:5, surface:'floor',
+    items:[ {beat:0,   kind:'laser', orient:'v', h:65, w:6,
+             period:0.9, dutyOn:0.42},
+            {beat:2.5, kind:'spike'} ] },
+
+  // ===== ceiling-side patterns (used during inverted-grav sections) =====
+  { id:'ceil_solo_spike',     tier:1, len:2, surface:'ceiling',
+    items:[ {beat:0, kind:'spike-ceiling'} ] },
+
+  { id:'ceil_double_spike',   tier:1, len:3, surface:'ceiling',
+    items:[ {beat:0, kind:'spike-ceiling'}, {beat:1, kind:'spike-ceiling'} ] },
+
+  { id:'ceil_triple_spike',   tier:1, len:4, surface:'ceiling',
+    items:[ {beat:0, kind:'spike-ceiling'}, {beat:1, kind:'spike-ceiling'},
+            {beat:2, kind:'spike-ceiling'} ] },
+
+  { id:'ceil_zig',            tier:1, len:5, surface:'ceiling',
+    items:[ {beat:0,   kind:'spike-ceiling'},
+            {beat:1.4, kind:'spike-ceiling'},
+            {beat:2.8, kind:'spike-ceiling'},
+            {beat:4.2, kind:'spike-ceiling'} ] },
+
+  { id:'ceil_run',            tier:1, len:6, surface:'ceiling',
+    items:[ {beat:0, kind:'spike-ceiling'}, {beat:1, kind:'spike-ceiling'},
+            {beat:2, kind:'spike-ceiling'}, {beat:3, kind:'spike-ceiling'},
+            {beat:4, kind:'spike-ceiling'} ] },
+
+  { id:'ceil_breather',       tier:1, len:2, surface:'ceiling',
+    items:[] },
+];
+
+// ---------- Reset ----------
+function resetState() {
+  state.mode        = 'playing';
+  state.elapsed     = 0;
+  state.distance    = 0;
+  state.speed       = MODE.baseSpeed;
+  state.py          = GROUND_Y - CUBE_SIZE;
+  state.ppy         = state.py;
+  state.pvy         = 0;
+  state.grav        = +1;
+  state.onSurface   = true;
+  state.coyote      = 0;
+  state.buffer      = 0;
+  state.glitch      = 0;
+  state.rot         = 0;
+  state.rotVel      = 0;
+  state.squash      = 0;
+  state.barIdx      = 0;
+  state.nextBarDist = 0;
+  state.obstacles   = [];
+  state.particles   = [];
+  state.score       = 0;
+  state.distM       = 0;
+  state.jumpHeld    = false;
+  state.scheduledGrav = +1;
+  state.overPit     = false;
+  // First bar starts immediately after a short safe runway.
+  state.nextBarDist = W;
+  // First flux field on mode 1 lands somewhere inside the first
+  // [flipMinM, flipMaxM] window. Mode 0 stays grounded forever.
+  if (MODE.autoFlip) {
+    state.nextFieldDistM = MODE.flipMinM
+      + Math.random() * (MODE.flipMaxM - MODE.flipMinM);
+  } else {
+    state.nextFieldDistM = Infinity;
+  }
+  updateHUD();
+}
+
+// ---------- Pattern scheduler ----------
+function scheduleNextBar() {
+  // World x at which this bar begins. Patterns place obstacles at
+  // (barStartX + beat * BEAT_SEC * speed). We capture the *current*
+  // speed — on fast ramps this shifts the grid slightly but reads
+  // naturally because everything is locally beat-aligned.
+  const barStartX = state.nextBarDist;
+  const speed = state.speed;
+
+  // ---- Auto-flip: place a flux field at the start of this bar
+  // when the world distance has caught up to the next-field meter
+  // threshold. This keeps the field on a bar boundary so the bar
+  // we're about to roll uses the post-flip surface — no awkward
+  // mid-bar surface mismatch.
+  const barStartDistM = barStartX / METER_PX;
+  if (MODE.autoFlip && barStartDistM >= state.nextFieldDistM) {
+    // Place the field just before the bar — gives the player a tiny
+    // "wind-up" pause then patterns resume on the new surface.
+    const fieldX = barStartX - 80;
+    state.obstacles.push({
+      kind: 'field',
+      x:   fieldX,
+      dir: state.scheduledGrav === +1 ? 'up' : 'down',
+      used: false,
+    });
+    state.scheduledGrav *= -1;
+    // Roll the next interval. Add the just-crossed meter so we don't
+    // re-trigger immediately if the player is fast.
+    state.nextFieldDistM = barStartDistM
+      + MODE.flipMinM
+      + Math.random() * (MODE.flipMaxM - MODE.flipMinM);
+  }
+
+  // Eligible patterns: tier-gated and surface-matched to the
+  // grav state at this bar's start.
+  const futureGrav    = state.scheduledGrav;
+  const targetSurface = futureGrav === +1 ? 'floor' : 'ceiling';
+  const pool = PATTERNS.filter(p =>
+    p.tier <= MODE.patternTier &&
+    (!p.surface || p.surface === targetSurface || p.surface === 'both')
+  );
+
+  // Difficulty curve inside a mode: early bars favour short patterns,
+  // late bars favour longer / denser ones.
+  const distM = state.distM;
+  let weights = pool.map(p => {
+    let w = 1;
+    if (p.items.length <= 1 && distM > 40) w *= 0.4;
+    if (p.items.length >= 3 && distM < 20) w *= 0.3;
+    return w;
+  });
+  const total = weights.reduce((a,b)=>a+b,0);
+  let r = Math.random() * total;
+  let pat = pool[0];
+  for (let i=0;i<pool.length;i++){ r -= weights[i]; if (r <= 0){ pat = pool[i]; break; } }
+
+  for (const item of pat.items) {
+    const x = barStartX + item.beat * BEAT_SEC * speed;
+    spawnItem(item, x, futureGrav);
+  }
+
+  // The next bar starts after this bar's length (in beats) plus a
+  // safety gap of ~1.5 beats so patterns don't overlap.
+  const patternSpan = pat.len * BEAT_SEC * speed;
+  const gap         = 1.5 * BEAT_SEC * speed;
+  state.nextBarDist = barStartX + patternSpan + gap;
+  state.barIdx++;
+}
+
+function spawnItem(item, x, grav) {
+  if (item.kind === 'spike') {
+    state.obstacles.push({
+      kind:'spike', x, y: GROUND_Y - 18, w: 22, h: 18, onCeiling:false,
+    });
+  } else if (item.kind === 'spike-ceiling') {
+    state.obstacles.push({
+      kind:'spike', x, y: CEIL_Y, w: 22, h: 18, onCeiling:true,
+    });
+  } else if (item.kind === 'pillar') {
+    const h = item.h || 40;
+    const w = item.w || 30;          // optional width override (e.g. wide_pillar)
+    state.obstacles.push({
+      kind:'pillar', x, y: GROUND_Y - h, w, h,
+    });
+  } else if (item.kind === 'spike-on') {
+    // Spike sitting on top of a pillar — center it on a 30-wide pillar
+    // by default. Use the pillar's height + an optional offset to lift
+    // the spike base off the pillar surface.
+    const pillarH = item.pillarH || 34;
+    const pillarW = item.pillarW || 30;
+    const ofs     = item.ofs || 0;
+    const sy      = GROUND_Y - pillarH - 18 - ofs;
+    state.obstacles.push({
+      kind:'spike', x: x + (pillarW - 22) / 2, y: sy,
+      w: 22, h: 18, onCeiling:false,
+    });
+  } else if (item.kind === 'mover') {
+    // Oscillating block. Two flavours:
+    //   axis 'y' (default) — vertical bobber hovering above the
+    //     active surface. baseY is px above the surface.
+    //   axis 'x' — slider that hugs the floor and shuttles left/right
+    //     around its spawn x. Reads as a horizontal moving wall the
+    //     player must time their jump for.
+    // y/x are recomputed every frame in tickMover().
+    const axis   = item.axis   || 'y';
+    const range  = item.range  || 22;
+    const period = item.period || 1.8;
+    const phase  = item.phase  || 0;
+    const w      = item.w      || 28;
+    const h      = item.h      || 28;
+    const baseY  = item.baseY  || 50;        // px above active surface (y-axis)
+    if (axis === 'x') {
+      // Slider sits flush on the floor.
+      const homeY = GROUND_Y - h - 2;
+      state.obstacles.push({
+        kind:'mover', axis:'x',
+        x, homeX: x, y: homeY, homeY,
+        w, h, range, period, phase, baseY,
+        t: phase, onCeiling: false,
+      });
+    } else {
+      state.obstacles.push({
+        kind:'mover', axis:'y',
+        x, homeX: x, y: 0, homeY: 0,
+        w, h, range, period, phase, baseY,
+        t: 0, onCeiling: grav === -1,
+      });
+    }
+  } else if (item.kind === 'laser') {
+    // Toggling beam. Two flavours:
+    //   orient 'h' (default) — horizontal beam at jump-arc height,
+    //     paired with a spike below so the jump must time the OFF.
+    //   orient 'v' — vertical bar near the floor that's tall enough
+    //     the cube can't run through it. ON = jump over, OFF = walk
+    //     through. Top is below jump apex so it's always clearable.
+    const orient = item.orient || 'h';
+    const period = item.period || 0.9;
+    const dutyOn = item.dutyOn || 0.45;
+    const phase  = item.phase  || 0;
+    if (orient === 'v') {
+      const h = item.h || 70;                 // tall enough to block, short enough to jump
+      const w = item.w || 6;
+      const yTop = GROUND_Y - h;
+      state.obstacles.push({
+        kind:'laser', orient:'v',
+        x, y: yTop, w, h,
+        period, dutyOn, phase, t: phase, on: false,
+        onCeiling: false,
+      });
+    } else {
+      const h      = item.h || 4;
+      const w      = item.w || 80;
+      const yAbove = item.y || 60;
+      const y = grav === +1 ? GROUND_Y - yAbove : CEIL_Y + yAbove - h;
+      state.obstacles.push({
+        kind:'laser', orient:'h',
+        x, y, w, h,
+        period, dutyOn, phase, t: phase, on: false,
+        onCeiling: grav === -1,
+      });
+    }
+  } else if (item.kind === 'pit') {
+    // Dark-matter pit — gap in the floor. Cube falling into it dies.
+    // Only meaningful in normal gravity; on the ceiling, pits are
+    // visual decoration (cube can't fall into a floor hole when it
+    // lives on the roof).
+    const w = item.w || 70;
+    state.obstacles.push({
+      kind:'pit', x, y: GROUND_Y, w, h: H - GROUND_Y,
+    });
+  }
+}
+
+// ---------- Input ----------
+function requestJump() {
+  if (state.mode !== 'playing') return;
+  // If grounded (or within coyote window) — jump now.
+  // Otherwise buffer the input for JUMP_BUFFER seconds so
+  // players who mash slightly early still jump on land.
+  if (state.onSurface || state.coyote > 0) {
+    doJump();
+  } else {
+    state.buffer = JUMP_BUFFER;
+  }
+}
+
+function doJump() {
+  // Jump direction is opposite gravity. grav=+1 → jump up (vy = -JUMP).
+  state.pvy        = -JUMP_VEL * state.grav;
+  state.onSurface  = false;
+  state.coyote     = 0;
+  state.buffer     = 0;
+  // Spin: one full revolution per expected airtime. Direction is
+  // forward-rolling: clockwise in normal gravity, counter-clockwise
+  // when ceiling-running so the cube always rolls "with" the world.
+  const expectedAir = (2 * JUMP_VEL) / GRAVITY;
+  state.rotVel = (Math.PI * 2 / expectedAir) * state.grav;
+  jumpSfx();
+  spawnTrailBurst(4, /*onJump*/ true);
+}
+
+const touchBtn = document.getElementById('tJump');
+function onDown(e) {
+  if (state.mode === 'menu' || state.mode === 'gameover') {
+    // Tapping on canvas shouldn't trigger menu actions — leave those
+    // to the overlay buttons so the user sees the mode picker.
+    return;
+  }
+  state.jumpHeld = true;
+  requestJump();
+  e.preventDefault();
+}
+function onUp(e) { state.jumpHeld = false; }
+
+cvs.addEventListener('mousedown', onDown);
+cvs.addEventListener('mouseup',   onUp);
+cvs.addEventListener('touchstart', onDown, { passive:false });
+cvs.addEventListener('touchend',   onUp);
+if (touchBtn) {
+  touchBtn.addEventListener('touchstart', onDown, { passive:false });
+  touchBtn.addEventListener('touchend',   onUp);
+  touchBtn.addEventListener('mousedown',  onDown);
+  touchBtn.addEventListener('mouseup',    onUp);
+}
+
+addEventListener('keydown', (e) => {
+  if (e.repeat) return;
+  const k = e.key.toLowerCase();
+  if (k === ' ' || k === 'arrowup' || k === 'w') {
+    state.jumpHeld = true;
+    if (state.mode === 'menu')     { startGame(); return; }
+    if (state.mode === 'gameover') { startGame(); return; }
+    if (state.mode === 'paused')   { state.mode = 'playing'; hideOverlays(); return; }
+    requestJump();
+    e.preventDefault();
+  } else if (k === 'p' && state.mode !== 'menu') {
+    if (state.mode === 'playing')     { state.mode = 'paused';   showOverlay('pauseScreen'); }
+    else if (state.mode === 'paused') { state.mode = 'playing';  hideOverlays(); }
+  } else if (k === 'm') {
+    const muted = sfx.toggle();
+    document.getElementById('muteBtnMenu').textContent = muted ? '♪ SOUND OFF' : '♪ SOUND ON';
+  } else if (k === 'r') {
+    if (state.mode !== 'menu') startGame();
+  }
+});
+
+addEventListener('keyup', (e) => {
+  const k = e.key.toLowerCase();
+  if (k === ' ' || k === 'arrowup' || k === 'w') state.jumpHeld = false;
+});
+
+// ---------- Mode picker ----------
+const mode0Btn = document.getElementById('mode0');
+const mode1Btn = document.getElementById('mode1');
+function selectMode(n) {
+  MODE = MODES[n];
+  mode0Btn.setAttribute('aria-pressed', n === 0 ? 'true' : 'false');
+  mode1Btn.setAttribute('aria-pressed', n === 1 ? 'true' : 'false');
+  hudModeVal.textContent = MODE.label;
+}
+mode0Btn.addEventListener('click', () => selectMode(0));
+mode1Btn.addEventListener('click', () => selectMode(1));
+
+// ---------- Menu buttons ----------
+document.getElementById('startBtn').addEventListener('click', startGame);
+document.getElementById('retryBtn').addEventListener('click', startGame);
+document.getElementById('resumeBtn').addEventListener('click', () => {
+  state.mode = 'playing'; hideOverlays();
+});
+document.getElementById('restartBtnPause').addEventListener('click', startGame);
+document.getElementById('muteBtnMenu').addEventListener('click', () => {
+  const muted = sfx.toggle();
+  document.getElementById('muteBtnMenu').textContent = muted ? '♪ SOUND OFF' : '♪ SOUND ON';
+});
+
+// ---------- Game lifecycle ----------
+function startGame() {
+  resetState();
+  hideOverlays();
+  last = performance.now();
+  sfx.init();
+}
+
+function endGame() {
+  if (state.mode === 'gameover') return;
+  state.mode = 'gameover';
+  const finalScore = Math.floor(state.score);
+  const isBest = finalScore > state.best;
+  if (isBest) {
+    state.best = finalScore;
+    localStorage.setItem('flux.best', String(finalScore));
+  }
+  document.getElementById('finalScore').textContent = pad(finalScore, 6);
+  document.getElementById('finalBest').textContent  = pad(state.best, 6);
+  document.getElementById('finalDist').textContent  = pad(state.distM, 4) + 'm';
+  document.getElementById('newBestMsg').style.display = isBest ? 'block' : 'none';
+  if (window.NostalgiaScores) {
+    window.NostalgiaScores.submitAndReport(
+      'flux', finalScore, document.getElementById('scoreStatus')
+    );
+  }
+  showOverlay('gameoverScreen');
+  deathSfx();
+  // Brief screen-shake cue: trigger a glitch pulse that the render
+  // pass reads and decays.
+  state.glitch = 1.0;
+}
+
+// ---------- Update ----------
+function update(dt) {
+  if (state.mode !== 'playing') return;
+  state.elapsed += dt;
+
+  // Speed ramp — per mode's rampPerM. Keep it distance-linked so
+  // even if the session is short, the curve matches intent.
+  state.speed = Math.min(
+    MODE.speedCap,
+    MODE.baseSpeed + state.distM * MODE.rampPerM
+  );
+
+  // World scroll
+  const dx = state.speed * dt;
+  state.distance += dx;
+  const newM = Math.floor(state.distance / METER_PX);
+  state.distM   = newM;
+  state.score   = newM * SCORE_PER_M;
+
+  // Schedule bars as the cube eats into the future.
+  // We schedule when the player is within ~1 bar of the next bar
+  // start so obstacles exist before they scroll into view.
+  while (state.distance + W > state.nextBarDist) {
+    scheduleNextBar();
+  }
+
+  // Save previous y BEFORE applying velocity — used for continuous
+  // collision so a fast-falling cube lands on the moment of crossing
+  // rather than where the velocity step ends up.
+  state.ppy = state.py;
+
+  // Gravity + vertical motion
+  state.pvy += GRAVITY * state.grav * dt;
+  state.pvy = clamp(state.pvy, -MAX_FALL, MAX_FALL);
+  state.py += state.pvy * dt;
+
+  // Surfaces — grounded in normal grav, ceiling'd when flipped.
+  const surfaceY = state.grav === +1
+    ? GROUND_Y - CUBE_SIZE   // top-left y that rests on floor
+    : CEIL_Y;                // top-left y that rests on ceiling
+
+  // Cache pit overlap so the surface clamp can choose to let the
+  // cube fall through. Pits only matter in normal gravity (the
+  // ceiling has no holes — those are dark-matter floor voids).
+  state.overPit = state.grav === +1 && isOverPit();
+
+  // Check if we landed this frame.
+  const wasAir = !state.onSurface;
+  if (state.grav === +1 && state.py >= surfaceY) {
+    if (state.overPit) {
+      // Cube is over a pit — DON'T snap. Let it fall and kill once
+      // it's fully past the floor line.
+      state.onSurface = false;
+      state.coyote    = Math.max(0, state.coyote - dt);
+      if (state.py > GROUND_Y + 8) return kill();
+    } else {
+      state.py        = surfaceY;
+      state.pvy       = 0;
+      if (wasAir) onLanded();
+      state.onSurface = true;
+      state.coyote    = COYOTE_TIME;
+    }
+  } else if (state.grav === -1 && state.py <= surfaceY) {
+    state.py        = surfaceY;
+    state.pvy       = 0;
+    if (wasAir) onLanded();
+    state.onSurface = true;
+    state.coyote    = COYOTE_TIME;
+  } else {
+    // In air — decrement coyote window.
+    state.onSurface = false;
+    state.coyote    = Math.max(0, state.coyote - dt);
+  }
+
+  // ---------- Rotation ----------
+  if (!state.onSurface) {
+    state.rot += state.rotVel * dt;
+  } else {
+    // Ease angle back to nearest quarter-turn so the cube reads
+    // square-ish at rest. Full snap to 0 is jarring; this gives a
+    // tiny settle frame.
+    const target = Math.round(state.rot / (Math.PI / 2)) * (Math.PI / 2);
+    state.rot += (target - state.rot) * Math.min(1, dt * 18);
+    state.rotVel = 0;
+  }
+
+  // Squash decay (set in onLanded). Pure visual.
+  if (state.squash > 0) state.squash = Math.max(0, state.squash - dt * 6);
+
+  // Decrement buffer regardless
+  state.buffer = Math.max(0, state.buffer - dt);
+
+  // Continuous exhaust trail while running
+  if (state.onSurface && Math.random() < 0.6) spawnTrailBurst(1, false);
+
+  // Obstacles — tick animation, cull, and collide. Flux fields
+  // (auto-flip barriers) live in the same array and are checked
+  // inside updateObstacles().
+  updateObstacles(dt);
+
+  // Particles
+  for (const p of state.particles) {
+    p.x   += p.vx * dt;
+    p.y   += p.vy * dt;
+    p.vy  += 600 * dt * (p.worldY ? 0 : 1);   // world-relative particles don't fall
+    p.life -= dt;
+  }
+  state.particles = state.particles.filter(p => p.life > 0);
+
+  // Cosmetic glitch decay (used on death flash)
+  if (state.glitch > 0) state.glitch = Math.max(0, state.glitch - dt * 2);
+
+  updateHUD();
+}
+
+// Shared landing logic — used both for floor/ceiling rest and for
+// pillar-top landings. Keeps the two paths consistent (sfx, squash,
+// jump-buffer) so behaviour matches whatever surface you touch.
+function onLanded() {
+  landSfx();
+  spawnTrailBurst(3, false);
+  state.squash = 1;
+  // Buffered jump: if the player pressed just before landing,
+  // consume it now.
+  if (state.buffer > 0) {
+    state.buffer = 0;
+    doJump();
+  }
+}
+
+// Player world x (used for collision vs. obstacles, which live in world coords)
+function playerWorldX() { return state.distance + PLAYER_X; }
+
+function playerRect() {
+  return {
+    x: playerWorldX() + 3,
+    y: state.py + 3,
+    w: CUBE_SIZE - 6,
+    h: CUBE_SIZE - 6,
+  };
+}
+
+function rectsOverlap(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x
+      && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+function spikeHit(pr, o) {
+  // Triangle hit: approximate spike with a shrunken rect at its
+  // center (same read as GD's generous spike hitbox).
+  const box = {
+    x: o.x + 4, y: o.y + (o.onCeiling ? 2 : 4),
+    w: o.w - 8, h: o.h - 6,
+  };
+  return rectsOverlap(pr, box);
+}
+
+function pillarHit(pr, o) {
+  // Solid block — standard rect.
+  return rectsOverlap(pr, { x: o.x, y: o.y, w: o.w, h: o.h });
+}
+
+// Landing on top of a pillar is safe (cube rides it). The check
+// is "continuous" — we look at where the cube WAS last frame
+// (state.ppy) versus where it IS now to confirm it actually crossed
+// the pillar's surface from above (or below in flipped grav). This
+// kills the "magnet from the side" feel: brushing a pillar while
+// running into it is a side hit (and therefore a kill), never a
+// snap-to-top.
+function pillarLandsOn(pr, o, grav) {
+  // Horizontal overlap (use the inner hitbox already computed).
+  if (pr.x + pr.w <= o.x || pr.x >= o.x + o.w) return false;
+
+  // Inner-rect inset is +3 from the cube top-left. So the inner
+  // rect's bottom = ppy + 3 + (CUBE_SIZE - 6) = ppy + CUBE_SIZE - 3.
+  const innerOffset = 3;
+  const innerH      = CUBE_SIZE - 6;
+
+  if (grav === +1) {
+    const prevBottom = state.ppy + innerOffset + innerH;
+    const currBottom = pr.y + pr.h;
+    // Cube was strictly above pillar's top last frame, and is now
+    // at or below the surface line. That's a true descent crossing.
+    return prevBottom <= o.y + 1 && currBottom >= o.y;
+  } else {
+    const prevTop = state.ppy + innerOffset;
+    const currTop = pr.y;
+    const oBottom = o.y + o.h;
+    return prevTop >= oBottom - 1 && currTop <= oBottom;
+  }
+}
+
+// True if the cube's center horizontally overlaps a dark-matter pit.
+// Used by the surface clamp in update() so pits can drop the cube
+// through the floor instead of catching it.
+function isOverPit() {
+  const cx = playerWorldX() + CUBE_SIZE / 2;
+  for (const o of state.obstacles) {
+    if (o.kind !== 'pit') continue;
+    if (cx > o.x + 4 && cx < o.x + o.w - 4) return true;
+  }
+  return false;
+}
+
+// Mover position update — two flavours.
+//   axis 'y' — vertical bobber above the active surface (floor in
+//     normal grav, ceiling in inverted). y recomputed each tick.
+//   axis 'x' — horizontal slider near the floor. Oscillates around
+//     `homeX`; y stays fixed at `homeY`.
+function tickMover(o, dt) {
+  o.t += dt;
+  const wave = Math.sin(o.t * (2 * Math.PI / o.period) + (o.phase || 0));
+  if (o.axis === 'x') {
+    o.x = o.homeX + wave * o.range;
+    o.y = o.homeY;
+  } else {
+    const dy = wave * o.range;
+    if (o.onCeiling) {
+      o.y = CEIL_Y + (o.baseY - dy) - o.h;     // measured below ceiling
+    } else {
+      o.y = GROUND_Y - o.baseY - dy - o.h / 2; // measured above floor
+    }
+  }
+}
+
+// Laser toggles between active (deadly) and inactive (passable) on
+// a fixed period. Pre-computes its `on` flag so render and collision
+// agree per frame.
+function tickLaser(o, dt) {
+  o.t += dt;
+  const phase = o.t % o.period;
+  o.on = phase < o.dutyOn;
+}
+
+function updateObstacles(dt) {
+  const pr = playerRect();
+  const px = playerWorldX();
+  const pcx = px + CUBE_SIZE / 2;
+  const pcy = state.py + CUBE_SIZE / 2;
+  // Cull anything well past the player; iterate forward for collision.
+  const cullX = state.distance - 60;
+  let write = 0;
+  for (let i = 0; i < state.obstacles.length; i++) {
+    const o = state.obstacles[i];
+    if (o.x + (o.w || 30) < cullX) continue;
+    state.obstacles[write++] = o;
+
+    // Tick animated kinds regardless of broad-phase distance — the
+    // mover/laser must be in the right pose by the time it's in
+    // collision range, and visually-correct earlier than that too.
+    if (o.kind === 'mover') tickMover(o, dt);
+    else if (o.kind === 'laser') tickLaser(o, dt);
+
+    // Broad-phase: skip if horizontally far from the player.
+    const dx = o.x - px;
+    if (dx > 100 || dx < -CUBE_SIZE - 60) continue;
+
+    if (o.kind === 'spike') {
+      if (spikeHit(pr, o)) return kill();
+    } else if (o.kind === 'pillar') {
+      if (pillarLandsOn(pr, o, state.grav)) {
+        // Stand on top — snap cube exactly to the pillar surface,
+        // zero vy, and run the same landing handler the floor uses
+        // so sfx/squash/jump-buffer all stay consistent.
+        const wasAir = !state.onSurface;
+        if (state.grav === +1) state.py = o.y - CUBE_SIZE;
+        else                   state.py = o.y + o.h;
+        state.pvy       = 0;
+        state.onSurface = true;
+        state.coyote    = COYOTE_TIME;
+        if (wasAir) onLanded();
+      } else if (pillarHit(pr, o)) {
+        return kill();
+      }
+    } else if (o.kind === 'mover') {
+      // Solid block — same as pillar but no landing snap (mover keeps
+      // moving so a snap would feel uncontrollable). Treat any contact
+      // as a kill.
+      if (rectsOverlap(pr, { x:o.x, y:o.y, w:o.w, h:o.h })) return kill();
+    } else if (o.kind === 'laser') {
+      // Beam only kills while active. Visual fade at toggle is in render.
+      if (o.on && rectsOverlap(pr, { x:o.x, y:o.y, w:o.w, h:o.h })) return kill();
+    } else if (o.kind === 'field') {
+      // Flux field — full-height vertical barrier. Crossing it once
+      // flips gravity. Tracks `used` so we don't re-flip on re-entry.
+      const FIELD_W = 30;
+      if (!o.used && pcx > o.x + 4 && pcx < o.x + FIELD_W - 4) {
+        o.used = true;
+        // Flip — direction stored on field but actual flip is just
+        // "invert current grav" (matches the scheduler's prediction).
+        state.grav = state.grav === +1 ? -1 : +1;
+        state.pvy = 0;
+        portalSfx();
+        // Field-crossing confetti — purple-cyan bits.
+        for (let k = 0; k < 14; k++) {
+          const ang = Math.random() * Math.PI * 2;
+          const sp  = rand(140, 280);
+          state.particles.push({
+            x: o.x + FIELD_W / 2 - state.distance,
+            y: H / 2 + (Math.random() - 0.5) * (PLAY_H - 40),
+            vx: Math.cos(ang) * sp,
+            vy: Math.sin(ang) * sp,
+            life: 0.5, max: 0.5,
+            color: o.dir === 'up' ? '--portal-up' : '--portal-down',
+            glyph: Math.random() < 0.5 ? '0' : '1',
+            worldY: 0,
+          });
+        }
+      }
+    }
+    // 'pit' has no kill check here — the surface clamp in update()
+    // handles the death by letting the cube fall through.
+  }
+  state.obstacles.length = write;
+}
+
+function kill() {
+  if (state.elapsed < 0.05) return;   // ignore first-frame edge cases
+  endGame();
+}
+
+function spawnTrailBurst(n, onJump) {
+  const color = onJump ? '--trail-hot' : '--trail';
+  for (let i = 0; i < n; i++) {
+    state.particles.push({
+      x: PLAYER_X + (onJump ? 0 : -4),
+      y: state.py + CUBE_SIZE * (state.grav === +1 ? 0.7 : 0.25),
+      vx: -rand(80, 180),
+      vy: rand(-30, 30) + (onJump ? -rand(40,140) * state.grav : 0),
+      life: onJump ? 0.5 : 0.35,
+      max:  onJump ? 0.5 : 0.35,
+      glyph: Math.random() < 0.5 ? '0' : '1',
+      color,
+      worldY: 1,   // relative to floor, gravity applies
+    });
+  }
+}
+
+// ---------- Render ----------
+function render() {
+  // Background — purple gradient with subtle grid
+  ctx.fillStyle = color('--bg-deep');
+  ctx.fillRect(0, 0, W, H);
+
+  drawStars();
+  drawGrid();
+
+  // Ground + ceiling slabs
+  drawGround();
+
+  // World-space items (translate by -scrollX)
+  const ox = -state.distance;
+  ctx.save();
+  ctx.translate(ox, 0);
+
+  drawObstacles();
+
+  ctx.restore();
+
+  // Particles
+  drawParticles();
+
+  // Player cube — drawn in screen space (fixed x)
+  drawCube(PLAYER_X, state.py);
+
+  // HUD overlay scanlines inside canvas
+  ctx.globalAlpha = 0.06;
+  ctx.fillStyle = '#ffffff';
+  for (let y = 0; y < H; y += 3) ctx.fillRect(0, y, W, 1);
+  ctx.globalAlpha = 1;
+
+  // Death glitch flash
+  if (state.glitch > 0) {
+    const a = state.glitch * 0.35;
+    ctx.globalAlpha = a;
+    ctx.fillStyle = color('--accent-hot');
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawStars() {
+  // Tiny parallax star field, scrolls slower than world
+  const pscroll = state.distance * 0.2;
+  const count = 40;
+  const hue = color('--star');
+  ctx.fillStyle = hue;
+  for (let i = 0; i < count; i++) {
+    const seed = i * 53.13;
+    let x = (seed * 97) % W - (pscroll % W);
+    if (x < 0) x += W;
+    const y = (seed * 41) % (H - 80) + 20;
+    ctx.globalAlpha = 0.4 + ((i * 7) % 4) * 0.12;
+    ctx.fillRect(x, y, 2, 2);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawGrid() {
+  // Vertical grid lines moving with world. Spacing is a beat wide.
+  const spacing = BEAT_SEC * state.speed;   // px per beat
+  if (spacing <= 0) return;
+  const offset  = state.distance % spacing;
+  ctx.strokeStyle = color('--grid-line');
+  ctx.globalAlpha = 0.5;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let x = -offset; x < W; x += spacing) {
+    ctx.moveTo(x | 0, CEIL_Y);
+    ctx.lineTo(x | 0, GROUND_Y);
+  }
+  ctx.stroke();
+  // Horizontal mid-rules
+  ctx.globalAlpha = 0.25;
+  ctx.beginPath();
+  for (let y = CEIL_Y + 60; y < GROUND_Y; y += 60) {
+    ctx.moveTo(0, y | 0); ctx.lineTo(W, y | 0);
+  }
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
+function drawGround() {
+  // When gravity is flipped, swap to the warm amber palette so the
+  // player has an unmistakable cue that the world is upside-down.
+  // Default violet stays for normal gravity.
+  const flipped = state.grav === -1;
+  const gCol = color(flipped ? '--ground-flip'    : '--ground');
+  const gHi  = color(flipped ? '--ground-flip-hi' : '--ground-hi');
+
+  // Floor slab
+  ctx.fillStyle = gCol;
+  ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y);
+  ctx.fillStyle = gHi;
+  ctx.fillRect(0, GROUND_Y, W, 2);
+  // Ticks on floor, scroll-locked
+  const spacing = BEAT_SEC * state.speed;
+  const offset  = state.distance % spacing;
+  ctx.globalAlpha = 0.5;
+  for (let x = -offset; x < W; x += spacing) {
+    ctx.fillRect(x | 0, GROUND_Y + 6, 8, 1);
+  }
+  ctx.globalAlpha = 1;
+
+  // Ceiling slab (always visible — player can flip to it)
+  ctx.fillStyle = gCol;
+  ctx.fillRect(0, 0, W, CEIL_Y);
+  ctx.fillStyle = gHi;
+  ctx.fillRect(0, CEIL_Y - 2, W, 2);
+  ctx.globalAlpha = 0.5;
+  for (let x = -offset; x < W; x += spacing) {
+    ctx.fillRect(x | 0, CEIL_Y - 7, 8, 1);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawObstacles() {
+  for (const o of state.obstacles) {
+    // Skip off-screen early for perf
+    const sx = o.x - state.distance;
+    if (sx + (o.w || 30) < -20 || sx > W + 20) continue;
+
+    switch (o.kind) {
+      case 'spike':  drawSpike(o);  break;
+      case 'pillar': drawPillar(o); break;
+      case 'mover':  drawMover(o);  break;
+      case 'laser':  drawLaser(o);  break;
+      case 'pit':    drawPit(o);    break;
+      case 'field':  drawField(o);  break;
+    }
+  }
+}
+
+function drawSpike(o) {
+  const col = color('--spike');
+  const hi  = color('--spike-hi');
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  if (o.onCeiling) {
+    // Triangle pointing down
+    ctx.moveTo(o.x,           o.y);
+    ctx.lineTo(o.x + o.w,     o.y);
+    ctx.lineTo(o.x + o.w / 2, o.y + o.h);
+  } else {
+    // Triangle pointing up
+    ctx.moveTo(o.x,           o.y + o.h);
+    ctx.lineTo(o.x + o.w,     o.y + o.h);
+    ctx.lineTo(o.x + o.w / 2, o.y);
+  }
+  ctx.closePath();
+  ctx.fill();
+  // Bright tip
+  ctx.fillStyle = hi;
+  if (o.onCeiling) {
+    ctx.fillRect(o.x + o.w / 2 - 1, o.y + o.h - 4, 2, 4);
+  } else {
+    ctx.fillRect(o.x + o.w / 2 - 1, o.y, 2, 4);
+  }
+}
+
+function drawPillar(o) {
+  const col = color('--pillar');
+  const hi  = color('--pillar-hi');
+  ctx.fillStyle = col;
+  ctx.fillRect(o.x, o.y, o.w, o.h);
+  // Inner dark panel for depth
+  ctx.fillStyle = 'rgba(0,0,0,0.32)';
+  ctx.fillRect(o.x + 3, o.y + 3, o.w - 6, o.h - 6);
+  // Highlights along top + left
+  ctx.fillStyle = hi;
+  ctx.fillRect(o.x, o.y, o.w, 2);
+  ctx.fillRect(o.x, o.y, 2, o.h);
+  // Data tick hatching
+  ctx.fillStyle = col;
+  ctx.globalAlpha = 0.55;
+  for (let y = o.y + 8; y < o.y + o.h - 4; y += 10) {
+    ctx.fillRect(o.x + 5, y, o.w - 10, 1);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// Bobbing/sliding block. Stylized like a hovering data drone with a
+// small glow trail showing its motion direction. The trail axis
+// depends on whether the mover is a y-bobber or an x-slider.
+function drawMover(o) {
+  const col = color('--portal-down');   // hot pink — telegraphs "moves"
+  const hi  = color('--cube-glow');
+  // Cosine of the wave gives current velocity direction (±1).
+  const v = Math.cos(o.t * (2 * Math.PI / o.period) + (o.phase || 0));
+  ctx.globalAlpha = 0.25;
+  ctx.fillStyle = col;
+  if (o.axis === 'x') {
+    // Trail extends opposite of current motion — points where the
+    // slider just came from.
+    const tailW = 16;
+    const tailX = v > 0 ? o.x - tailW : o.x + o.w;
+    ctx.fillRect(tailX, o.y + 2, tailW, o.h - 4);
+  } else {
+    const tailH = 14;
+    const tailY = v > 0 ? o.y - tailH : o.y + o.h;
+    ctx.fillRect(o.x + 2, tailY, o.w - 4, tailH);
+  }
+  ctx.globalAlpha = 1;
+
+  // Body
+  ctx.fillStyle = col;
+  ctx.fillRect(o.x, o.y, o.w, o.h);
+  // Inset
+  ctx.fillStyle = 'rgba(0,0,0,0.32)';
+  ctx.fillRect(o.x + 3, o.y + 3, o.w - 6, o.h - 6);
+  // Highlight cross
+  ctx.fillStyle = hi;
+  ctx.fillRect(o.x + o.w / 2 - 1, o.y + 3, 2, o.h - 6);
+  ctx.fillRect(o.x + 3, o.y + o.h / 2 - 1, o.w - 6, 2);
+}
+
+// Toggling laser beam. Horizontal flavour is a flashing bar at jump
+// height; vertical flavour is a thin floor-to-shin wall the cube
+// must jump OVER when on. Both share an inactive "ghost" rendering
+// that keeps the emitters visible so the player can read the threat.
+function drawLaser(o) {
+  const col = color('--spike');
+  const hi  = color('--spike-hi');
+  const isV = o.orient === 'v';
+  if (o.on) {
+    // Active — solid neon bar with bright core.
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = col;
+    if (isV) {
+      ctx.fillRect(o.x - 3, o.y - 4, o.w + 6, o.h + 8);
+    } else {
+      ctx.fillRect(o.x - 4, o.y - 3, o.w + 8, o.h + 6);
+    }
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = col;
+    ctx.fillRect(o.x, o.y, o.w, o.h);
+    ctx.fillStyle = hi;
+    if (isV) {
+      // Bright vertical core
+      ctx.fillRect(o.x + o.w / 2 - 1, o.y, 2, o.h);
+      // Top + bottom emitters
+      ctx.fillStyle = col;
+      ctx.fillRect(o.x - 3, o.y - 4, o.w + 6, 4);
+      ctx.fillRect(o.x - 3, o.y + o.h, o.w + 6, 4);
+    } else {
+      ctx.fillRect(o.x, o.y + o.h / 2 - 1, o.w, 2);
+      // Left + right emitters
+      ctx.fillStyle = col;
+      ctx.fillRect(o.x - 4, o.y - 3, 4, o.h + 6);
+      ctx.fillRect(o.x + o.w, o.y - 3, 4, o.h + 6);
+    }
+  } else {
+    // Inactive — emitters still present, beam dotted.
+    ctx.globalAlpha = 0.45;
+    ctx.fillStyle = col;
+    if (isV) {
+      ctx.fillRect(o.x - 3, o.y - 4, o.w + 6, 4);
+      ctx.fillRect(o.x - 3, o.y + o.h, o.w + 6, 4);
+    } else {
+      ctx.fillRect(o.x - 4, o.y - 3, 4, o.h + 6);
+      ctx.fillRect(o.x + o.w, o.y - 3, 4, o.h + 6);
+    }
+    ctx.globalAlpha = 0.25;
+    if (isV) {
+      for (let dy = 0; dy < o.h; dy += 6) {
+        ctx.fillRect(o.x, o.y + dy, o.w, 3);
+      }
+    } else {
+      for (let dx = 0; dx < o.w; dx += 6) {
+        ctx.fillRect(o.x + dx, o.y, 3, o.h);
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
+// Dark-matter pit — a hole in the floor filled with a downward
+// cascade of glitchy 0/1 glyphs. Reads as a "do not step here" zone.
+function drawPit(o) {
+  // Cut the floor: paint the pit slot with the deep-bg color so it
+  // visually erases the floor.
+  ctx.fillStyle = color('--bg-deep');
+  ctx.fillRect(o.x, GROUND_Y, o.w, H - GROUND_Y);
+  // Dark void column rising slightly above the floor line.
+  ctx.fillStyle = '#000';
+  ctx.globalAlpha = 0.75;
+  ctx.fillRect(o.x, GROUND_Y - 2, o.w, H - GROUND_Y + 2);
+  ctx.globalAlpha = 1;
+  // Edges — dim purple lip so the pit reads framed.
+  ctx.fillStyle = color('--cube-dark');
+  ctx.fillRect(o.x - 1, GROUND_Y - 2, 2, 4);
+  ctx.fillRect(o.x + o.w - 1, GROUND_Y - 2, 2, 4);
+
+  // Falling 0/1 glyphs — pseudo-random, scrolls with elapsed.
+  ctx.font = "9px 'JetBrains Mono', monospace";
+  ctx.textBaseline = 'top';
+  const count = Math.max(3, Math.floor(o.w / 14));
+  for (let i = 0; i < count; i++) {
+    const seed = (o.x * 0.13 + i * 41.7);
+    const col  = ((seed * 31) % 1000) / 1000;
+    const colX = o.x + 4 + col * (o.w - 8);
+    const phase = (state.elapsed * 90 + seed * 60) % (H - GROUND_Y + 10);
+    const colY = GROUND_Y + phase;
+    const alpha = 0.35 + ((Math.sin(seed + state.elapsed * 5) + 1) * 0.3);
+    ctx.globalAlpha = Math.min(0.85, alpha);
+    ctx.fillStyle = i % 3 === 0 ? color('--portal-down') : color('--portal-up');
+    ctx.fillText(i % 2 === 0 ? '0' : '1', colX, colY);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// Flux field — tall vertical electronic barrier. Crossing it flips
+// gravity. Animated stripes hint that crossing is a one-way event.
+function drawField(o) {
+  const FIELD_W = 30;
+  const dirCol = color(o.dir === 'up' ? '--portal-up' : '--portal-down');
+  const accent = color(o.dir === 'up' ? '--portal-down' : '--portal-up');
+  // Outer glow
+  ctx.globalAlpha = 0.25;
+  ctx.fillStyle = dirCol;
+  ctx.fillRect(o.x - 4, CEIL_Y - 4, FIELD_W + 8, GROUND_Y - CEIL_Y + 8);
+  ctx.globalAlpha = 1;
+  // Body
+  ctx.fillStyle = dirCol;
+  ctx.fillRect(o.x, CEIL_Y, FIELD_W, GROUND_Y - CEIL_Y);
+  // Inner darker band
+  ctx.fillStyle = 'rgba(0,0,0,0.32)';
+  ctx.fillRect(o.x + 4, CEIL_Y + 4, FIELD_W - 8, GROUND_Y - CEIL_Y - 8);
+  // Animated horizontal stripes scrolling vertically — direction
+  // matches the flip target so the field telegraphs its purpose.
+  const stripeOffset = (state.elapsed * (o.dir === 'up' ? -120 : 120)) % 12;
+  ctx.globalAlpha = 0.7;
+  ctx.fillStyle = accent;
+  for (let y = CEIL_Y + stripeOffset; y < GROUND_Y; y += 12) {
+    ctx.fillRect(o.x + 6, y | 0, FIELD_W - 12, 2);
+  }
+  ctx.globalAlpha = 1;
+  // Side rails
+  ctx.fillStyle = accent;
+  ctx.fillRect(o.x, CEIL_Y, 2, GROUND_Y - CEIL_Y);
+  ctx.fillRect(o.x + FIELD_W - 2, CEIL_Y, 2, GROUND_Y - CEIL_Y);
+  // Direction arrow at top + bottom
+  ctx.fillStyle = '#fff';
+  const ax = o.x + FIELD_W / 2;
+  ctx.beginPath();
+  if (o.dir === 'up') {
+    ctx.moveTo(ax, CEIL_Y + 6);
+    ctx.lineTo(ax - 5, CEIL_Y + 14);
+    ctx.lineTo(ax + 5, CEIL_Y + 14);
+  } else {
+    ctx.moveTo(ax, GROUND_Y - 6);
+    ctx.lineTo(ax - 5, GROUND_Y - 14);
+    ctx.lineTo(ax + 5, GROUND_Y - 14);
+  }
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawParticles() {
+  ctx.font = "9px 'JetBrains Mono', monospace";
+  ctx.textBaseline = 'top';
+  for (const p of state.particles) {
+    ctx.globalAlpha = Math.max(0, p.life / p.max);
+    ctx.fillStyle = color(p.color);
+    ctx.fillText(p.glyph, p.x, p.y);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawCube(x, y) {
+  const face = color('--cube-face');
+  const glow = color('--cube-glow');
+  const dark = color('--cube-dark');
+
+  // Squash/stretch on landing — vertical compression that decays.
+  // Compensate horizontally so volume looks preserved.
+  const sq  = state.squash;                  // 0..1
+  const sy  = 1 - sq * 0.22;
+  const sx  = 1 + sq * 0.14;
+
+  const cx  = x + CUBE_SIZE / 2;
+  const cy  = y + CUBE_SIZE / 2 + sq * 2;    // sink slightly when squashed
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(state.rot);
+  ctx.scale(sx, sy);
+
+  // Tiny glitch jitter — pixel offset every few frames while airborne.
+  const jx = (!state.onSurface && ((state.elapsed * 60) | 0) % 4 === 0) ? 1 : 0;
+  const half = CUBE_SIZE / 2;
+
+  // Glow halo
+  ctx.globalAlpha = 0.35;
+  ctx.fillStyle = face;
+  ctx.fillRect(-half - 3, -half - 3, CUBE_SIZE + 6, CUBE_SIZE + 6);
+  ctx.globalAlpha = 1;
+
+  // Body
+  ctx.fillStyle = face;
+  ctx.fillRect(-half + jx, -half, CUBE_SIZE, CUBE_SIZE);
+  // Inset panel
+  ctx.fillStyle = dark;
+  ctx.fillRect(-half + jx + 4, -half + 4, CUBE_SIZE - 8, CUBE_SIZE - 8);
+  // Bright notches (eyes) — drawn relative to top-left of body
+  ctx.fillStyle = glow;
+  ctx.fillRect(-half + jx + 9,  -half + 10, 4, 4);
+  ctx.fillRect(-half + jx + 15, -half + 10, 4, 4);
+  // Mouth slit
+  ctx.fillRect(-half + jx + 9, -half + 18, 10, 2);
+
+  ctx.restore();
+}
+
+// ---------- HUD ----------
+function updateHUD() {
+  hudScore.textContent = pad(Math.floor(state.score), 6);
+  hudDist.textContent  = pad(state.distM, 4) + 'm';
+  hudBest.textContent  = pad(state.best, 6);
+  hudSpeed.textContent = (state.speed / MODE.baseSpeed).toFixed(1) + 'x';
+  hudGravVal.textContent = state.grav === +1 ? '↓' : '↑';
+}
+
+// ---------- Main loop ----------
+let last = performance.now();
+const MAX_DT = 1 / 30;   // clamp huge dt on tab-switch
+function frame(now) {
+  let dt = (now - last) / 1000;
+  last = now;
+  if (dt > MAX_DT) dt = MAX_DT;
+
+  update(dt);
+  render();
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// Initial HUD + menu
+updateHUD();
+showOverlay('startScreen');
+
+})();
+</script>
+</body>
+</html>

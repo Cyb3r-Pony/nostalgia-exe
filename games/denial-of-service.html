@@ -1,0 +1,1197 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>Denial-of-Service — Nostalgia.exe</title>
+<link rel="icon" type="image/svg+xml" href="../favicon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=Press+Start+2P&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="shared/arcade.css" />
+<style>
+  /* ==========================================================
+     DENIAL-OF-SERVICE — radial orbit survival.
+
+     Square canvas (540×540) since gameplay is rotation-symmetric;
+     a wide 16:9 frame would waste lateral space. Palette is the
+     same hot-pink / cyan synthwave family used across the hub,
+     tinted toward red on the threat side because every alarm in
+     this game is a "packet you don't want to handle".
+     ========================================================== */
+  :root {
+    --core-hot:    #ff4fa1;
+    --core-mid:    #b388ff;
+    --core-cold:   #5ff0c9;
+    --orbit-line:  #4a2080;
+    --orbit-glow:  #b388ff;
+    --player-body: #ff4fa1;
+    --player-glow: #ffa8d1;
+    --player-trail:#ffd86b;
+    --threat-line: #ffd86b;       /* linear projectile */
+    --threat-wave: #ff7a30;       /* rotating arc */
+    --threat-track:#5ff0c9;       /* tracker */
+    --pu-shield:   #5ff0c9;
+    --pu-phase:    #b388ff;
+    --pu-slow:     #ffd86b;
+    --pu-pulse:    #ff4fa1;
+    --bg-deep:     #0a0520;
+    --bg-mid:      #160a36;
+    --grid-line:   #2a1a6a;
+    --star:        #6b5ab8;
+  }
+  [data-theme="light"] {
+    --core-hot:    #c03a7a;
+    --core-mid:    #7a58b0;
+    --core-cold:   #1aa88a;
+    --orbit-line:  #a895d0;
+    --orbit-glow:  #6e5890;
+    --player-body: #c03a7a;
+    --player-glow: #e879ae;
+    --player-trail:#b88500;
+    --threat-line: #b88500;
+    --threat-wave: #c84810;
+    --threat-track:#1aa88a;
+    --pu-shield:   #1aa88a;
+    --pu-phase:    #7a58b0;
+    --pu-slow:     #b88500;
+    --pu-pulse:    #c03a7a;
+    --bg-deep:     #d8c8e8;
+    --bg-mid:      #b8a0d0;
+    --grid-line:   #b8a0d0;
+    --star:        #6e5890;
+  }
+
+  canvas { max-width: 100%; max-height: 100%; image-rendering: pixelated; }
+
+  .controls-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 6px 14px;
+    margin: 18px 0 22px;
+    text-align: left;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .controls-grid kbd {
+    background: var(--panel-2);
+    border: 1px solid var(--text);
+    padding: 2px 6px;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 9px;
+    min-width: 44px;
+    text-align: center;
+  }
+
+  /* Power-up legend uses larger glyphs so the four colors read
+     immediately on the menu, same scale as ByteJet's start menu. */
+  .pu-legend {
+    display: grid;
+    grid-template-columns: 38px 1fr;
+    gap: 10px 14px;
+    align-items: center;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    margin-bottom: 22px;
+  }
+  .pu-legend span:nth-child(odd) {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 24px;
+    line-height: 1;
+    text-align: center;
+    text-shadow: 0 0 6px currentColor;
+  }
+
+  /* Touch controls — left/right cluster on the left, ring up/down
+     on the right. Mirrors the layout of the keyboard arrows. */
+  .touch .left-cluster  { display: flex; gap: 8px; }
+  .touch .right-cluster { display: flex; gap: 8px; }
+</style>
+</head>
+<body>
+
+<div class="bg-grid"></div>
+<div class="scanlines"></div>
+
+<header class="topbar">
+  <a href="../index.html" class="back">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    EXIT
+  </a>
+  <div class="title-tag">DENIAL-OF-SERVICE<span class="ver">v1.0.0 // ORBIT.GUARD</span></div>
+  <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme"></button>
+</header>
+
+<section class="hud" id="hud">
+  <div class="hud-col">
+    <div class="hud-stat score">SCORE<strong id="hudScore">000000</strong></div>
+    <div class="hud-stat">TIME<strong id="hudTime">0.0s</strong></div>
+  </div>
+  <div class="hud-col">
+    <div class="hud-stat best">BEST<strong id="hudBest">000000</strong></div>
+    <div class="hud-stat">RING<strong id="hudRing">2</strong></div>
+  </div>
+  <div class="hud-col">
+    <div class="hud-stat">COMBO<strong id="hudCombo">×1</strong></div>
+    <div class="hud-stat" id="hudPU" style="color:var(--accent-2)">BUFF<strong id="hudBuff">NONE</strong></div>
+  </div>
+</section>
+
+<div class="stage">
+  <canvas id="game" width="540" height="540"></canvas>
+</div>
+
+<footer class="bottombar">
+  <div class="keys">
+    <span><kbd>←</kbd>/<kbd>→</kbd> ROTATE</span>
+    <span><kbd>↑</kbd>/<kbd>↓</kbd> RING</span>
+    <span><kbd>P</kbd> PAUSE</span>
+    <span><kbd>M</kbd> MUTE</span>
+    <span><kbd>R</kbd> RESTART</span>
+  </div>
+  <div>© NOSTALGIA.EXE — <span class="blink">█</span></div>
+</footer>
+
+<div class="touch" id="touch">
+  <div class="left-cluster">
+    <button id="tCCW" aria-label="Rotate CCW">◀</button>
+    <button id="tCW"  aria-label="Rotate CW">▶</button>
+  </div>
+  <div class="right-cluster">
+    <button id="tOut" aria-label="Outer ring">▲</button>
+    <button id="tIn"  aria-label="Inner ring">▼</button>
+  </div>
+</div>
+
+<!-- Start menu -->
+<div class="overlay" id="startScreen">
+  <div class="card">
+    <div class="card-head">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span>denial_of_service.app</span>
+      <span>_ □ ×</span>
+    </div>
+    <h1>DENIAL-OF-SERVICE</h1>
+    <p>Defend the core. Orbit it, dodge the inbound packets, jump rings to thread the gaps. Buzz close to threats for combo points; one collision drops you.</p>
+
+    <div class="controls-grid">
+      <kbd>← / A</kbd><span>rotate counter-clockwise</span>
+      <kbd>→ / D</kbd><span>rotate clockwise</span>
+      <kbd>↑ / W</kbd><span>shift to outer ring</span>
+      <kbd>↓ / S</kbd><span>shift to inner ring</span>
+      <kbd>P</kbd><span>pause</span>
+    </div>
+
+    <div class="pu-legend">
+      <span style="color:var(--pu-shield)">◎</span><span>SHIELD — absorbs one hit</span>
+      <span style="color:var(--pu-phase)">◈</span><span>PHASE — pass through threats for 4s</span>
+      <span style="color:var(--pu-slow)">◐</span><span>SLOW FIELD — half threat speed for 4s</span>
+      <span style="color:var(--pu-pulse)">⊕</span><span>PULSE CLEAR — wipes nearby threats</span>
+    </div>
+
+    <button class="btn" id="startBtn">▶ ENTER ORBIT</button>
+    <button class="btn ghost" id="muteBtnMenu">♪ SOUND ON</button>
+  </div>
+</div>
+
+<!-- Pause -->
+<div class="overlay hidden" id="pauseScreen">
+  <div class="card">
+    <div class="card-head">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span>pause.sys</span>
+      <span>_ □ ×</span>
+    </div>
+    <h2>PAUSED</h2>
+    <p>Orbit suspended.</p>
+    <button class="btn" id="resumeBtn">▶ RESUME</button>
+    <button class="btn ghost" id="restartBtnPause">↻ RESTART</button>
+  </div>
+</div>
+
+<!-- Game over -->
+<div class="overlay hidden" id="gameoverScreen">
+  <div class="card">
+    <div class="card-head">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span>node_down.log</span>
+      <span>_ □ ×</span>
+    </div>
+    <h2 style="color:var(--accent-hot)">SERVICE DENIED</h2>
+    <p>The node was overwhelmed.</p>
+    <div class="stat-row">
+      <div>SCORE<strong id="finalScore">000000</strong></div>
+      <div>BEST<strong id="finalBest">000000</strong></div>
+      <div>TIME<strong id="finalTime">0.0s</strong></div>
+    </div>
+    <p id="newBestMsg" style="color:var(--accent-2);margin:4px 0 16px;display:none">✦ NEW BEST ✦</p>
+    <p id="scoreStatus" class="score-status" data-state="idle"></p>
+    <button class="btn" id="retryBtn">↻ RETRY</button>
+    <a href="../index.html" class="btn ghost">◀ EXIT</a>
+  </div>
+</div>
+
+<!-- Public scoreboard plumbing -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.105.1"></script>
+<script src="../shared/supabase-config.js"></script>
+<script src="../shared/auth.js"></script>
+<script src="../shared/scores.js"></script>
+
+<script src="shared/arcade.js"></script>
+<script>
+/* =============================================================
+   DENIAL-OF-SERVICE — radial orbit-survival arcade game.
+
+   GEOMETRY
+     Player is bound to one of RINGS concentric circles around the
+     canvas center (CX, CY). Position is (angle, ringIdx) — render
+     converts to screen via (CX + r·cosθ, CY + r·sinθ).
+
+   CONTROLS
+     ← / →   set rotation direction (sets state.dir, doesn't toggle)
+     ↑ / ↓   shift to outer / inner ring (with 0.15s lerp)
+
+   THREATS
+     'linear'  — point projectile from outer boundary, straight line
+                  toward the core. Despawn at radius < 6.
+     'wave'    — rotating arc occupying a single ring. 0.6s warning
+                  phase, then deadly while sweeping. Player dodges
+                  by switching rings or out-rotating it.
+     'tracker' — like linear but slowly turns toward player's angle.
+
+   POWER-UPS (per spec §5)
+     'shield'  — single-hit absorber, persistent until consumed
+     'phase'   — temporary invulnerability (4s)
+     'slow'    — halve threat velocities (4s)
+     'pulse'   — instant clear of all threats inside outer ring
+
+   SCORE
+     base       = 10 / sec survived
+     pickup     = +50 each
+     near miss  = +25 × current combo (combo grows up to ×5)
+
+   All palette lookups use Arcade.color() (cached). The shared
+   audio module handles the M-mute persistence and SFX.
+   ============================================================= */
+
+(() => {
+const cvs = document.getElementById('game');
+const ctx = cvs.getContext('2d');
+const W = cvs.width, H = cvs.height;
+const CX = W / 2, CY = H / 2;
+
+// ---------- Utilities from shared module ----------
+const { clamp, rand, randInt, pad, color, createAudio, createOverlayManager,
+        wireThemeToggle, fitCanvas } = Arcade;
+
+// ---------- Theme + canvas ----------
+wireThemeToggle('themeToggle');
+fitCanvas(cvs, '.stage', 16);
+
+// ---------- Audio ----------
+const sfx = createAudio('dos.muted');
+function pulseSfx()    { sfx.beep(180, 0.06, 'sine',     0.04); }
+function shiftSfx()    { sfx.beep(420, 0.04, 'square',   0.04, 580); }
+function pickupSfx()   { sfx.beep(820, 0.10, 'triangle', 0.12, 1240); }
+function nearMissSfx() { sfx.beep(940, 0.06, 'square',   0.05, 1320); }
+function hitSfx()      { sfx.noise(0.15, 0.22); sfx.beep(180, 0.16, 'square', 0.14, 70); }
+function deathSfx()    { sfx.noise(0.4, 0.32); sfx.beep(80, 0.5, 'sawtooth', 0.22, 30); }
+function pulseClearSfx(){ sfx.beep(1200, 0.18, 'square', 0.07, 200); }
+
+// ---------- Overlays ----------
+const { show: showOverlay, hideAll: hideOverlays } =
+  createOverlayManager(['startScreen', 'pauseScreen', 'gameoverScreen']);
+
+// ---------- HUD elements ----------
+const hudScore = document.getElementById('hudScore');
+const hudTime  = document.getElementById('hudTime');
+const hudBest  = document.getElementById('hudBest');
+const hudRing  = document.getElementById('hudRing');
+const hudCombo = document.getElementById('hudCombo');
+const hudBuff  = document.getElementById('hudBuff');
+
+// ---------- Constants ----------
+const RING_COUNT = 4;
+// Inner→outer radii. Inner is tight so threats arrive faster, outer
+// is wide so more space to angularly outrun the wave arcs.
+const RING_RADII = [80, 125, 170, 215];
+const PLAYER_R   = 8;
+const CORE_R     = 26;
+const SPAWN_R    = 280;             // outside outer ring; threats start here
+
+// Player angular speed scales per ring — inner is faster (smaller
+// circumference, same linear speed feels faster) so the gameplay
+// trade-off matches the spec's "inner = tighter = harder" claim.
+const ANG_VEL = [2.55, 2.20, 1.95, 1.75];   // rad/sec
+
+// Difficulty
+const BASE_THREAT_INTERVAL = 1.7;
+const MIN_THREAT_INTERVAL  = 0.32;
+const THREAT_RAMP          = 0.022;        // per second of elapsed
+const BASE_THREAT_SPEED    = 110;          // px/sec inward
+const SPEED_RAMP           = 0.6;          // +px/sec per second elapsed
+const SPEED_CAP            = 220;
+
+// Power-ups
+const PHASE_DUR    = 4.0;
+const SLOW_DUR     = 4.0;
+const STABILIZER_DUR = 5.0;
+const SLOW_FACTOR  = 0.5;
+const PULSE_RADIUS = 200;                  // pulse-clear blast range
+
+// Combo
+const COMBO_WINDOW = 2.0;                  // seconds a near-miss adds to combo
+const COMBO_MAX    = 5;
+const COMBO_RADIUS = 28;                   // distance considered "near miss"
+
+// Score
+const SCORE_PER_SEC      = 10;
+const SCORE_PER_PICKUP   = 50;
+const SCORE_PER_NEAR_MISS = 25;
+
+// Ring transition lerp duration
+const RING_TRANS_DUR = 0.14;
+
+// ---------- State ----------
+const state = {
+  mode:       'menu',
+  elapsed:    0,
+
+  // Player
+  ringIdx:    2,
+  fromRing:   2,
+  toRing:     2,
+  ringT:      1,                    // 1 = at toRing
+  angle:      -Math.PI / 2,         // start at top
+  dir:        +1,                   // +1 CW, -1 CCW (canvas-y is down)
+
+  // Buffs
+  shield:        false,
+  phaseUntil:    0,
+  slowUntil:     0,
+  stabilizerUntil: 0,
+
+  // Entities
+  threats:    [],
+  pickups:    [],
+  particles:  [],
+
+  // Spawn timers
+  nextThreatAt: 1.4,
+  nextPickupAt: 6.0,
+
+  // Score / combo
+  score:      0,
+  best:       Number(localStorage.getItem('dos.best') || 0),
+  combo:      1,
+  comboT:     0,
+  nearMisses: 0,
+
+  // Cosmetic
+  shakeT:     0,
+  flashT:     0,
+};
+
+// ---------- Helpers ----------
+function angleDelta(a, b) {
+  // Smallest signed angle from a to b in (-PI, PI]
+  let d = (b - a) % (Math.PI * 2);
+  if (d >  Math.PI) d -= Math.PI * 2;
+  if (d <= -Math.PI) d += Math.PI * 2;
+  return d;
+}
+
+function playerPos() {
+  const r = RING_RADII[state.fromRing] +
+    (RING_RADII[state.toRing] - RING_RADII[state.fromRing]) * state.ringT;
+  return {
+    x: CX + r * Math.cos(state.angle),
+    y: CY + r * Math.sin(state.angle),
+    r,
+  };
+}
+
+function isPhasing() { return state.elapsed < state.phaseUntil; }
+function isSlowed()  { return state.elapsed < state.slowUntil; }
+function isStable()  { return state.elapsed < state.stabilizerUntil; }
+
+// ---------- Reset ----------
+function resetState() {
+  state.mode      = 'playing';
+  state.elapsed   = 0;
+  state.ringIdx   = 2;
+  state.fromRing  = 2;
+  state.toRing    = 2;
+  state.ringT     = 1;
+  state.angle     = -Math.PI / 2;
+  state.dir       = +1;
+  state.shield    = false;
+  state.phaseUntil      = 0;
+  state.slowUntil       = 0;
+  state.stabilizerUntil = 0;
+  state.threats.length   = 0;
+  state.pickups.length   = 0;
+  state.particles.length = 0;
+  state.nextThreatAt = 1.4;
+  state.nextPickupAt = 6.0;
+  state.score      = 0;
+  state.combo      = 1;
+  state.comboT     = 0;
+  state.nearMisses = 0;
+  state.shakeT     = 0;
+  state.flashT     = 0;
+  updateHUD();
+}
+
+// ---------- Input ----------
+function attemptShiftRing(delta) {
+  // delta = +1 outward, -1 inward. No-op if already at boundary or
+  // mid-transition (prevents stacking inputs).
+  if (state.mode !== 'playing') return;
+  if (state.ringT < 1) return;
+  const next = clamp(state.toRing + delta, 0, RING_COUNT - 1);
+  if (next === state.toRing) return;
+  state.fromRing = state.toRing;
+  state.toRing   = next;
+  state.ringT    = 0;
+  shiftSfx();
+}
+
+addEventListener('keydown', e => {
+  if (e.repeat) return;
+  const k = e.key;
+  const lk = k.toLowerCase();
+  if (k === 'ArrowLeft' || lk === 'a') {
+    if (state.mode === 'playing') { state.dir = -1; sfx.init(); }
+    e.preventDefault();
+  } else if (k === 'ArrowRight' || lk === 'd') {
+    if (state.mode === 'playing') { state.dir = +1; sfx.init(); }
+    e.preventDefault();
+  } else if (k === 'ArrowUp' || lk === 'w') {
+    if (state.mode === 'menu' || state.mode === 'gameover') { startGame(); }
+    else { attemptShiftRing(+1); }
+    e.preventDefault();
+  } else if (k === 'ArrowDown' || lk === 's') {
+    if (state.mode === 'playing') attemptShiftRing(-1);
+    e.preventDefault();
+  } else if (k === ' ' || k === 'Spacebar' || k === 'Enter') {
+    if (state.mode === 'menu' || state.mode === 'gameover') startGame();
+    else if (state.mode === 'paused') { state.mode = 'playing'; hideOverlays(); }
+    e.preventDefault();
+  } else if (lk === 'p' && state.mode !== 'menu') {
+    if (state.mode === 'playing')      { state.mode = 'paused';   showOverlay('pauseScreen'); }
+    else if (state.mode === 'paused')  { state.mode = 'playing';  hideOverlays(); }
+  } else if (lk === 'm') {
+    const muted = sfx.toggle();
+    document.getElementById('muteBtnMenu').textContent = muted ? '♪ SOUND OFF' : '♪ SOUND ON';
+  } else if (lk === 'r') {
+    if (state.mode !== 'menu') startGame();
+  }
+});
+
+// Touch buttons
+function bindTouch(btn, fn) {
+  if (!btn) return;
+  const trigger = (e) => { fn(); e.preventDefault(); sfx.init(); };
+  btn.addEventListener('touchstart', trigger, { passive: false });
+  btn.addEventListener('mousedown',  trigger);
+}
+bindTouch(document.getElementById('tCCW'), () => { if (state.mode === 'playing') state.dir = -1; });
+bindTouch(document.getElementById('tCW'),  () => { if (state.mode === 'playing') state.dir = +1; });
+bindTouch(document.getElementById('tOut'), () => attemptShiftRing(+1));
+bindTouch(document.getElementById('tIn'),  () => attemptShiftRing(-1));
+
+// Buttons
+document.getElementById('startBtn').addEventListener('click', startGame);
+document.getElementById('retryBtn').addEventListener('click', startGame);
+document.getElementById('resumeBtn').addEventListener('click', () => {
+  state.mode = 'playing'; hideOverlays();
+});
+document.getElementById('restartBtnPause').addEventListener('click', startGame);
+document.getElementById('muteBtnMenu').addEventListener('click', () => {
+  const muted = sfx.toggle();
+  document.getElementById('muteBtnMenu').textContent = muted ? '♪ SOUND OFF' : '♪ SOUND ON';
+});
+
+// ---------- Lifecycle ----------
+function startGame() {
+  resetState();
+  hideOverlays();
+  last = performance.now();
+  sfx.init();
+}
+
+function endGame() {
+  if (state.mode === 'gameover') return;
+  state.mode = 'gameover';
+  const finalScore = Math.floor(state.score);
+  const isBest = finalScore > state.best;
+  if (isBest) {
+    state.best = finalScore;
+    localStorage.setItem('dos.best', String(finalScore));
+  }
+  document.getElementById('finalScore').textContent = pad(finalScore, 6);
+  document.getElementById('finalBest').textContent  = pad(state.best, 6);
+  document.getElementById('finalTime').textContent  = state.elapsed.toFixed(1) + 's';
+  document.getElementById('newBestMsg').style.display = isBest ? 'block' : 'none';
+  if (window.NostalgiaScores) {
+    window.NostalgiaScores.submitAndReport(
+      'denial-of-service', finalScore, document.getElementById('scoreStatus')
+    );
+  }
+  showOverlay('gameoverScreen');
+  deathSfx();
+  state.shakeT = 0.55;
+  state.flashT = 0.3;
+}
+
+// ---------- Spawning ----------
+function spawnThreat() {
+  const t = state.elapsed;
+  // Pool grows with elapsed time so the opening is mostly readable
+  // linear projectiles before waves and trackers come in.
+  const pool = ['linear'];
+  if (t >=  8) pool.push('linear');     // weight linear higher
+  if (t >= 12) pool.push('wave');
+  if (t >= 20) pool.push('tracker');
+  if (t >= 30) pool.push('wave');       // waves more common late
+  const kind = pool[randInt(0, pool.length - 1)];
+  const baseSpeed = Math.min(SPEED_CAP, BASE_THREAT_SPEED + t * SPEED_RAMP);
+
+  if (kind === 'linear') {
+    const angle = Math.random() * Math.PI * 2;
+    const sp    = baseSpeed * rand(0.85, 1.15);
+    state.threats.push({
+      kind: 'linear',
+      x: CX + SPAWN_R * Math.cos(angle),
+      y: CY + SPAWN_R * Math.sin(angle),
+      vx: -sp * Math.cos(angle),
+      vy: -sp * Math.sin(angle),
+      r: 7,
+    });
+  } else if (kind === 'tracker') {
+    const angle = Math.random() * Math.PI * 2;
+    const sp    = baseSpeed * 0.85;
+    state.threats.push({
+      kind: 'tracker',
+      x: CX + SPAWN_R * Math.cos(angle),
+      y: CY + SPAWN_R * Math.sin(angle),
+      vx: -sp * Math.cos(angle),
+      vy: -sp * Math.sin(angle),
+      speed: sp,
+      r: 7,
+      turnRate: 0.9,                 // rad/sec max steering toward player
+    });
+  } else if (kind === 'wave') {
+    // Lock to one of the orbit rings so player must change rings or
+    // out-rotate it. Always start with a 0.6s warning phase.
+    const ring = randInt(0, RING_COUNT - 1);
+    const span = rand(Math.PI * 0.25, Math.PI * 0.45);   // arc half-width
+    state.threats.push({
+      kind: 'wave',
+      ring,
+      radius:      RING_RADII[ring],
+      centerAngle: Math.random() * Math.PI * 2,
+      span,
+      omega:       (Math.random() < 0.5 ? -1 : +1) * rand(0.9, 1.5),
+      warn:        0.6,                  // seconds of telegraph
+      life:        2.4,
+      r:           14,
+    });
+  }
+}
+
+function spawnPickup() {
+  const kinds = ['shield', 'phase', 'slow', 'pulse'];
+  // Shield is the most useful so it's most common; pulse is the
+  // most dramatic so it's the rarest.
+  const weights = [4, 2, 3, 2];
+  const total   = weights.reduce((a, b) => a + b, 0);
+  let r = Math.random() * total;
+  let kind = kinds[0];
+  for (let i = 0; i < kinds.length; i++) {
+    r -= weights[i];
+    if (r <= 0) { kind = kinds[i]; break; }
+  }
+  // Spawn on a random ring at a random angle, slowly drifting along
+  // the ring so it feels alive.
+  const ring  = randInt(0, RING_COUNT - 1);
+  const angle = Math.random() * Math.PI * 2;
+  state.pickups.push({
+    kind,
+    ring,
+    radius: RING_RADII[ring],
+    angle,
+    omega:  (Math.random() < 0.5 ? -1 : +1) * 0.4,
+    life:   8.0,
+    r:      11,
+  });
+}
+
+function applyPickup(kind) {
+  if (kind === 'shield')      state.shield = true;
+  else if (kind === 'phase')  state.phaseUntil = state.elapsed + PHASE_DUR;
+  else if (kind === 'slow')   state.slowUntil  = state.elapsed + SLOW_DUR;
+  else if (kind === 'pulse')  pulseClear();
+  state.score += SCORE_PER_PICKUP;
+  pickupSfx();
+}
+
+function pulseClear() {
+  // Wipe every threat within PULSE_RADIUS of the core. Trackers and
+  // waves both qualify — waves count as "near" if their radius is
+  // inside the blast.
+  const kept = [];
+  let cleared = 0;
+  for (const t of state.threats) {
+    if (t.kind === 'wave') {
+      if (t.radius <= PULSE_RADIUS) { cleared++; continue; }
+    } else {
+      const dx = t.x - CX, dy = t.y - CY;
+      if (dx*dx + dy*dy <= PULSE_RADIUS*PULSE_RADIUS) { cleared++; continue; }
+    }
+    kept.push(t);
+  }
+  state.threats = kept;
+  pulseClearSfx();
+  // Big shockwave particle ring
+  for (let i = 0; i < 40; i++) {
+    const a = (i / 40) * Math.PI * 2;
+    state.particles.push({
+      x: CX, y: CY,
+      vx: Math.cos(a) * 320,
+      vy: Math.sin(a) * 320,
+      life: 0.45, max: 0.45,
+      glyph: i % 2 ? '0' : '1',
+      color: '--pu-pulse',
+    });
+  }
+  if (cleared > 0) state.score += cleared * 5;
+}
+
+// ---------- Update ----------
+function update(dt) {
+  if (state.mode !== 'playing') return;
+  state.elapsed += dt;
+
+  // ---- Player rotation ----
+  const baseAng = ANG_VEL[state.toRing];
+  const angVel  = baseAng * (isStable() ? 0.65 : 1);
+  state.angle += state.dir * angVel * dt;
+  // Keep angle in (-PI, PI] for cleaner debugging
+  if (state.angle >  Math.PI) state.angle -= Math.PI * 2;
+  if (state.angle <= -Math.PI) state.angle += Math.PI * 2;
+
+  // ---- Ring transition lerp ----
+  if (state.ringT < 1) {
+    state.ringT = Math.min(1, state.ringT + dt / RING_TRANS_DUR);
+    if (state.ringT >= 1) state.fromRing = state.toRing;
+  }
+  state.ringIdx = state.toRing;
+
+  // ---- Combo decay ----
+  if (state.combo > 1) {
+    state.comboT -= dt;
+    if (state.comboT <= 0) state.combo = Math.max(1, state.combo - 1) || 1;
+  }
+
+  // ---- Threat motion ----
+  const threatSpeedMul = isSlowed() ? SLOW_FACTOR : 1;
+  const pp = playerPos();
+
+  for (let i = state.threats.length - 1; i >= 0; i--) {
+    const t = state.threats[i];
+    if (t.kind === 'linear') {
+      t.x += t.vx * threatSpeedMul * dt;
+      t.y += t.vy * threatSpeedMul * dt;
+      // Despawn when it crosses the core
+      const dx = t.x - CX, dy = t.y - CY;
+      if (dx*dx + dy*dy < CORE_R * CORE_R * 0.36) state.threats.splice(i, 1);
+    } else if (t.kind === 'tracker') {
+      // Steer velocity vector toward player by up to turnRate
+      const tx = pp.x - t.x, ty = pp.y - t.y;
+      const targetAng = Math.atan2(ty, tx);
+      const curAng    = Math.atan2(t.vy, t.vx);
+      let dA = angleDelta(curAng, targetAng);
+      const maxTurn = t.turnRate * dt;
+      dA = clamp(dA, -maxTurn, maxTurn);
+      const newAng = curAng + dA;
+      const sp = t.speed * threatSpeedMul;
+      t.vx = Math.cos(newAng) * sp;
+      t.vy = Math.sin(newAng) * sp;
+      t.x += t.vx * dt;
+      t.y += t.vy * dt;
+      const dx = t.x - CX, dy = t.y - CY;
+      if (dx*dx + dy*dy < CORE_R * CORE_R * 0.36) state.threats.splice(i, 1);
+    } else if (t.kind === 'wave') {
+      if (t.warn > 0) {
+        t.warn -= dt;
+      } else {
+        t.life -= dt;
+        t.centerAngle += t.omega * threatSpeedMul * dt;
+        if (t.life <= 0) state.threats.splice(i, 1);
+      }
+    }
+  }
+
+  // ---- Pickup motion ----
+  for (let i = state.pickups.length - 1; i >= 0; i--) {
+    const p = state.pickups[i];
+    p.angle += p.omega * dt;
+    p.life  -= dt;
+    if (p.life <= 0) state.pickups.splice(i, 1);
+  }
+
+  // ---- Spawning ----
+  state.nextThreatAt -= dt;
+  if (state.nextThreatAt <= 0) {
+    spawnThreat();
+    const interval = clamp(BASE_THREAT_INTERVAL - state.elapsed * THREAT_RAMP,
+                           MIN_THREAT_INTERVAL, BASE_THREAT_INTERVAL);
+    state.nextThreatAt = interval + rand(-0.1, 0.2);
+  }
+  state.nextPickupAt -= dt;
+  if (state.nextPickupAt <= 0) {
+    spawnPickup();
+    state.nextPickupAt = rand(8, 14);
+  }
+
+  // ---- Collisions ----
+  if (!isPhasing()) {
+    for (let i = state.threats.length - 1; i >= 0; i--) {
+      const t = state.threats[i];
+      if (threatHitsPlayer(t, pp)) {
+        if (state.shield) {
+          state.shield = false;
+          spawnHitBurst(pp.x, pp.y, '--pu-shield');
+          hitSfx();
+          state.threats.splice(i, 1);
+          state.combo = 1; state.comboT = 0;
+        } else {
+          spawnHitBurst(pp.x, pp.y, '--player-body');
+          return endGame();
+        }
+      }
+    }
+  }
+
+  // ---- Pickup collection (always allowed) ----
+  for (let i = state.pickups.length - 1; i >= 0; i--) {
+    const p = state.pickups[i];
+    const px = CX + p.radius * Math.cos(p.angle);
+    const py = CY + p.radius * Math.sin(p.angle);
+    const dx = px - pp.x, dy = py - pp.y;
+    if (dx*dx + dy*dy < (PLAYER_R + p.r) * (PLAYER_R + p.r)) {
+      applyPickup(p.kind);
+      spawnHitBurst(px, py, pickupColor(p.kind));
+      state.pickups.splice(i, 1);
+    }
+  }
+
+  // ---- Near-miss bonus ----
+  if (!isPhasing()) {
+    for (const t of state.threats) {
+      if (t.kind === 'wave') continue;          // waves don't count
+      if (t._counted) continue;
+      const dx = t.x - pp.x, dy = t.y - pp.y;
+      const d2 = dx*dx + dy*dy;
+      if (d2 < COMBO_RADIUS * COMBO_RADIUS && d2 > (PLAYER_R + t.r) * (PLAYER_R + t.r)) {
+        t._counted = true;
+        state.nearMisses++;
+        state.score += SCORE_PER_NEAR_MISS * state.combo;
+        state.combo = Math.min(COMBO_MAX, state.combo + 1);
+        state.comboT = COMBO_WINDOW;
+        nearMissSfx();
+        spawnHitBurst(pp.x, pp.y, '--player-trail');
+      }
+    }
+  }
+
+  // ---- Particle update ----
+  for (let i = state.particles.length - 1; i >= 0; i--) {
+    const p = state.particles[i];
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.vx *= 0.92;
+    p.vy *= 0.92;
+    p.life -= dt;
+    if (p.life <= 0) state.particles.splice(i, 1);
+  }
+
+  // Cosmetic decays
+  if (state.shakeT > 0) state.shakeT = Math.max(0, state.shakeT - dt);
+  if (state.flashT > 0) state.flashT = Math.max(0, state.flashT - dt);
+
+  // Time-based score
+  state.score += SCORE_PER_SEC * dt;
+
+  updateHUD();
+}
+
+function threatHitsPlayer(t, pp) {
+  if (t.kind === 'wave') {
+    if (t.warn > 0) return false;
+    // Player ring band overlap
+    if (Math.abs(pp.r - t.radius) > 16) return false;
+    const dA = Math.abs(angleDelta(state.angle, t.centerAngle));
+    return dA < t.span;
+  } else {
+    const dx = t.x - pp.x, dy = t.y - pp.y;
+    return dx*dx + dy*dy < (PLAYER_R + t.r - 2) * (PLAYER_R + t.r - 2);
+  }
+}
+
+function spawnHitBurst(x, y, col) {
+  for (let i = 0; i < 10; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const sp = rand(80, 220);
+    state.particles.push({
+      x, y,
+      vx: Math.cos(a) * sp,
+      vy: Math.sin(a) * sp,
+      life: 0.4, max: 0.4,
+      glyph: Math.random() < 0.5 ? '0' : '1',
+      color: col,
+    });
+  }
+}
+
+function pickupColor(kind) {
+  return kind === 'shield' ? '--pu-shield' :
+         kind === 'phase'  ? '--pu-phase'  :
+         kind === 'slow'   ? '--pu-slow'   :
+                             '--pu-pulse';
+}
+
+// ---------- HUD ----------
+function updateHUD() {
+  hudScore.textContent = pad(Math.floor(state.score), 6);
+  hudTime.textContent  = state.elapsed.toFixed(1) + 's';
+  hudBest.textContent  = pad(state.best, 6);
+  hudRing.textContent  = String(state.toRing);
+  hudCombo.textContent = '×' + state.combo;
+  // Buff line — display the longest-remaining active effect, with
+  // shield as a fallback persistent indicator.
+  let buff = 'NONE';
+  let col  = 'var(--text-dim)';
+  if (state.shield) { buff = 'SHIELD'; col = 'var(--pu-shield)'; }
+  if (isStable())  {
+    buff = 'STABLE ' + (state.stabilizerUntil - state.elapsed).toFixed(1) + 's';
+    col  = 'var(--accent-2)';
+  }
+  if (isSlowed())  {
+    buff = 'SLOW '   + (state.slowUntil - state.elapsed).toFixed(1) + 's';
+    col  = 'var(--pu-slow)';
+  }
+  if (isPhasing()) {
+    buff = 'PHASE '  + (state.phaseUntil - state.elapsed).toFixed(1) + 's';
+    col  = 'var(--pu-phase)';
+  }
+  hudBuff.textContent = buff;
+  document.getElementById('hudPU').style.color = col;
+}
+
+// ---------- Render ----------
+function render() {
+  let shx = 0, shy = 0;
+  if (state.shakeT > 0) {
+    shx = (Math.random() - 0.5) * 5;
+    shy = (Math.random() - 0.5) * 5;
+  }
+  ctx.save();
+  ctx.translate(shx, shy);
+
+  // Background
+  const grad = ctx.createRadialGradient(CX, CY, 20, CX, CY, W * 0.7);
+  grad.addColorStop(0,    color('--bg-mid'));
+  grad.addColorStop(1,    color('--bg-deep'));
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+
+  drawStars();
+  drawOrbits();
+  drawCore();
+  drawPickups();
+  drawThreats();
+  drawPlayer();
+  drawParticles();
+  drawFlash();
+  drawScanlines();
+
+  ctx.restore();
+}
+
+function drawStars() {
+  // Deterministic starfield seeded from a constant so it doesn't
+  // flicker between frames. Cheap and stable.
+  ctx.fillStyle = color('--star');
+  for (let i = 0; i < 60; i++) {
+    const seed = i * 53.13;
+    const x = (seed * 97) % W;
+    const y = (seed * 41) % H;
+    const sz = (i % 7 === 0) ? 2 : 1;
+    ctx.globalAlpha = 0.3 + (i % 5) * 0.1;
+    ctx.fillRect(x | 0, y | 0, sz, sz);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawOrbits() {
+  const lineCol = color('--orbit-line');
+  const glowCol = color('--orbit-glow');
+  for (let i = 0; i < RING_COUNT; i++) {
+    const r = RING_RADII[i];
+    // Subtle pulse — rings the player is currently on glow more
+    const isCur = i === state.toRing;
+    const pulse = 0.4 + Math.sin(state.elapsed * 2 + i) * 0.1;
+    ctx.globalAlpha = isCur ? 0.85 : pulse;
+    ctx.strokeStyle = isCur ? glowCol : lineCol;
+    ctx.lineWidth = isCur ? 2 : 1;
+    ctx.beginPath();
+    ctx.arc(CX, CY, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawCore() {
+  // Layered pulsing core: outer halo, mid ring, hot center, plus a
+  // tiny rotating dot that ties the core's "alive" feel together.
+  const t = state.elapsed;
+  const pulse = 1 + Math.sin(t * 3) * 0.08;
+  // Outer halo
+  ctx.globalAlpha = 0.35;
+  ctx.fillStyle = color('--core-cold');
+  ctx.beginPath();
+  ctx.arc(CX, CY, CORE_R * 1.6 * pulse, 0, Math.PI * 2);
+  ctx.fill();
+  // Mid
+  ctx.globalAlpha = 0.6;
+  ctx.fillStyle = color('--core-mid');
+  ctx.beginPath();
+  ctx.arc(CX, CY, CORE_R * 1.1 * pulse, 0, Math.PI * 2);
+  ctx.fill();
+  // Hot center
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = color('--core-hot');
+  ctx.beginPath();
+  ctx.arc(CX, CY, CORE_R * 0.62 * pulse, 0, Math.PI * 2);
+  ctx.fill();
+  // Bright pixel notch
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(CX - 1, CY - 1, 2, 2);
+}
+
+function drawPickups() {
+  for (const p of state.pickups) {
+    const px = CX + p.radius * Math.cos(p.angle);
+    const py = CY + p.radius * Math.sin(p.angle);
+    const col = color(pickupColor(p.kind));
+    // Pulsing aura
+    const a = 0.3 + Math.sin(p.angle * 4 + state.elapsed * 6) * 0.2;
+    ctx.globalAlpha = a;
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.arc(px, py, p.r + 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    // Outline ring
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(px, py, p.r, 0, Math.PI * 2);
+    ctx.stroke();
+    // Glyph
+    ctx.fillStyle = col;
+    ctx.font = "10px 'Press Start 2P', monospace";
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const glyph =
+      p.kind === 'shield' ? 'S' :
+      p.kind === 'phase'  ? 'P' :
+      p.kind === 'slow'   ? 'T' : '◆';
+    ctx.fillText(glyph, px, py + 1);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+  }
+}
+
+function drawThreats() {
+  for (const t of state.threats) {
+    if (t.kind === 'linear')      drawLinear(t);
+    else if (t.kind === 'tracker') drawTracker(t);
+    else                           drawWave(t);
+  }
+}
+
+function drawLinear(t) {
+  const col = color('--threat-line');
+  // Trail vector — show recent path so player can read incoming line
+  const len = 14;
+  const sp = Math.sqrt(t.vx * t.vx + t.vy * t.vy) || 1;
+  const tx = t.x - (t.vx / sp) * len;
+  const ty = t.y - (t.vy / sp) * len;
+  ctx.strokeStyle = col;
+  ctx.globalAlpha = 0.55;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(tx, ty);
+  ctx.lineTo(t.x, t.y);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+  // Diamond head
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.moveTo(t.x, t.y - t.r);
+  ctx.lineTo(t.x + t.r, t.y);
+  ctx.lineTo(t.x, t.y + t.r);
+  ctx.lineTo(t.x - t.r, t.y);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawTracker(t) {
+  const col = color('--threat-track');
+  // Hexagon-ish
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2 + state.elapsed * 2;
+    const px = t.x + Math.cos(a) * t.r;
+    const py = t.y + Math.sin(a) * t.r;
+    if (i === 0) ctx.moveTo(px, py);
+    else         ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+  ctx.fill();
+  // Inner dot
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(t.x - 1, t.y - 1, 2, 2);
+}
+
+function drawWave(t) {
+  const isWarn = t.warn > 0;
+  const col = color('--threat-wave');
+  // Arc segment
+  const start = t.centerAngle - t.span;
+  const end   = t.centerAngle + t.span;
+  ctx.strokeStyle = col;
+  ctx.lineWidth = 12;
+  if (isWarn) {
+    // Dashed telegraph that pulses
+    ctx.globalAlpha = 0.35 + Math.sin(state.elapsed * 24) * 0.25;
+    ctx.setLineDash([6, 6]);
+  } else {
+    ctx.globalAlpha = 1;
+  }
+  ctx.beginPath();
+  ctx.arc(CX, CY, t.radius, start, end);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.globalAlpha = 1;
+  // End-cap nubs so the arc reads "thick energy bar" rather than
+  // ambiguous brushstroke.
+  if (!isWarn) {
+    const sx = CX + Math.cos(start) * t.radius;
+    const sy = CY + Math.sin(start) * t.radius;
+    const ex = CX + Math.cos(end)   * t.radius;
+    const ey = CY + Math.sin(end)   * t.radius;
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(sx - 2, sy - 2, 4, 4);
+    ctx.fillRect(ex - 2, ey - 2, 4, 4);
+  }
+}
+
+function drawPlayer() {
+  const pp = playerPos();
+  // Trail dot trailing the player by a few frames of travel
+  const trailSteps = 6;
+  const baseAng = ANG_VEL[state.toRing];
+  for (let i = 1; i <= trailSteps; i++) {
+    const t = i / trailSteps;
+    const trailAng = state.angle - state.dir * baseAng * 0.04 * i;
+    const tx = CX + pp.r * Math.cos(trailAng);
+    const ty = CY + pp.r * Math.sin(trailAng);
+    ctx.globalAlpha = 0.55 * (1 - t);
+    ctx.fillStyle = color('--player-trail');
+    ctx.fillRect(tx | 0, ty | 0, 3, 3);
+  }
+  ctx.globalAlpha = 1;
+  // Phase blink
+  const phasing = isPhasing();
+  if (phasing) {
+    ctx.globalAlpha = 0.5 + Math.sin(state.elapsed * 30) * 0.2;
+  }
+  // Body
+  ctx.fillStyle = color('--player-glow');
+  ctx.beginPath();
+  ctx.arc(pp.x, pp.y, PLAYER_R + 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = color('--player-body');
+  ctx.beginPath();
+  ctx.arc(pp.x, pp.y, PLAYER_R, 0, Math.PI * 2);
+  ctx.fill();
+  // Bright pixel
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(pp.x - 1, pp.y - 1, 2, 2);
+  ctx.globalAlpha = 1;
+  // Shield aura
+  if (state.shield) {
+    ctx.strokeStyle = color('--pu-shield');
+    ctx.lineWidth = 2;
+    ctx.globalAlpha = 0.7 + Math.sin(state.elapsed * 8) * 0.3;
+    ctx.beginPath();
+    ctx.arc(pp.x, pp.y, PLAYER_R + 5, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawParticles() {
+  ctx.font = "9px 'JetBrains Mono', monospace";
+  ctx.textBaseline = 'top';
+  for (const p of state.particles) {
+    ctx.globalAlpha = Math.max(0, p.life / p.max);
+    ctx.fillStyle = color(p.color);
+    ctx.fillText(p.glyph, p.x, p.y);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawFlash() {
+  if (state.flashT <= 0) return;
+  const t = state.flashT / 0.3;
+  ctx.globalAlpha = t * 0.5;
+  ctx.fillStyle = color('--threat-wave');
+  ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = 1;
+}
+
+function drawScanlines() {
+  ctx.globalAlpha = 0.05;
+  ctx.fillStyle = '#ffffff';
+  for (let y = 0; y < H; y += 3) ctx.fillRect(0, y, W, 1);
+  ctx.globalAlpha = 1;
+}
+
+// ---------- Main loop ----------
+let last = performance.now();
+const MAX_DT = 1 / 30;
+function frame(now) {
+  let dt = (now - last) / 1000;
+  last = now;
+  if (dt > MAX_DT) dt = MAX_DT;
+  update(dt);
+  render();
+  requestAnimationFrame(frame);
+}
+
+resetState();
+state.mode = 'menu';
+showOverlay('startScreen');
+updateHUD();
+requestAnimationFrame(frame);
+
+})();
+</script>
+</body>
+</html>

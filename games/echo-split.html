@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>Echo Split — Nostalgia.exe</title>
+<link rel="icon" type="image/svg+xml" href="../favicon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=Press+Start+2P&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="shared/arcade.css" />
+<style>
+  /* ==========================================================
+     ECHO SPLIT — top-down arena. Player is bright cyan; clones
+     of past movement render as semi-transparent magenta dots
+     that loop on a recorded path. The arena fills with your
+     own history.
+     ========================================================== */
+  :root {
+    --player-body:  #5ff0c9;
+    --player-glow:  #b5ffe6;
+    --player-trail: #ffd86b;
+    --echo-body:    #b388ff;
+    --echo-trail:   #ff4fa1;
+    --hazard:       #ff7a30;
+    --arena-frame:  #3a2390;
+    --arena-line:   #2a1a6a;
+    --rec-tick:     #ff4fa1;
+    --bg-deep:      #060218;
+    --bg-mid:       #160a36;
+    --star:         #6b5ab8;
+  }
+  [data-theme="light"] {
+    --player-body:  #1aa88a;
+    --player-glow:  #5fd0b0;
+    --player-trail: #b88500;
+    --echo-body:    #7a58b0;
+    --echo-trail:   #c03a7a;
+    --hazard:       #c84810;
+    --arena-frame:  #6e5890;
+    --arena-line:   #b8a0d0;
+    --rec-tick:     #c03a7a;
+    --bg-deep:      #d8c8e8;
+    --bg-mid:       #c8b4dc;
+    --star:         #6e5890;
+  }
+
+  canvas { max-width: 100%; max-height: 100%; image-rendering: pixelated; cursor: crosshair; }
+
+  .controls-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 6px 14px;
+    margin: 18px 0 22px;
+    text-align: left;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .controls-grid kbd {
+    background: var(--panel-2);
+    border: 1px solid var(--text);
+    padding: 2px 6px;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 9px;
+    min-width: 44px;
+    text-align: center;
+  }
+
+  /* Echo legend on start menu */
+  .echo-legend {
+    display: grid;
+    grid-template-columns: 32px 1fr;
+    gap: 8px 14px;
+    align-items: center;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    margin-bottom: 22px;
+  }
+  .echo-legend span:nth-child(odd) {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 22px;
+    line-height: 1;
+    text-align: center;
+    text-shadow: 0 0 6px currentColor;
+  }
+</style>
+</head>
+<body>
+
+<div class="bg-grid"></div>
+<div class="scanlines"></div>
+
+<header class="topbar">
+  <a href="../index.html" class="back">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    EXIT
+  </a>
+  <div class="title-tag">ECHO SPLIT<span class="ver">v1.0.0 // LOOP.EXE</span></div>
+  <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme"></button>
+</header>
+
+<section class="hud" id="hud">
+  <div class="hud-col">
+    <div class="hud-stat score">SCORE<strong id="hudScore">000000</strong></div>
+    <div class="hud-stat">TIME<strong id="hudTime">0.0s</strong></div>
+  </div>
+  <div class="hud-col">
+    <div class="hud-stat best">BEST<strong id="hudBest">000000</strong></div>
+    <div class="hud-stat">CYCLES<strong id="hudCycles">0</strong></div>
+  </div>
+  <div class="hud-col">
+    <div class="hud-stat" id="hudEchoes">ECHOES<strong id="hudEchoVal">0/6</strong></div>
+    <div class="hud-stat">NEXT<strong id="hudNext">6.0s</strong></div>
+  </div>
+</section>
+
+<div class="stage">
+  <canvas id="game" width="720" height="480"></canvas>
+</div>
+
+<footer class="bottombar">
+  <div class="keys">
+    <span><kbd>WASD</kbd>/<kbd>↑↓←→</kbd> MOVE</span>
+    <span><kbd>P</kbd> PAUSE</span>
+    <span><kbd>M</kbd> MUTE</span>
+    <span><kbd>R</kbd> RESTART</span>
+  </div>
+  <div>© NOSTALGIA.EXE — <span class="blink">█</span></div>
+</footer>
+
+<div class="touch" id="touch">
+  <div class="left-cluster">
+    <button id="tUp"    aria-label="Up">▲</button>
+    <button id="tDown"  aria-label="Down">▼</button>
+    <button id="tLeft"  aria-label="Left">◀</button>
+    <button id="tRight" aria-label="Right">▶</button>
+  </div>
+</div>
+
+<!-- Start menu -->
+<div class="overlay" id="startScreen">
+  <div class="card">
+    <div class="card-head">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span>echo_split.app</span>
+      <span>_ □ ×</span>
+    </div>
+    <h1>ECHO SPLIT</h1>
+    <p>The arena records you. Every few seconds an <em>echo</em> spawns — a translucent clone that replays the last interval of your movement on a loop, forever. Stay alive while your own history fills the room.</p>
+
+    <div class="controls-grid">
+      <kbd>WASD / ↑↓←→</kbd><span>move freely in the arena</span>
+      <kbd>P</kbd><span>pause</span>
+      <kbd>R</kbd><span>restart — wipe the timeline</span>
+    </div>
+
+    <div class="echo-legend">
+      <span style="color:var(--player-body)">●</span><span>YOU — the only thing alive in the loop</span>
+      <span style="color:var(--echo-body)">◌</span><span>ECHO — replays your recorded path; non-destructible</span>
+      <span style="color:var(--hazard)">▲</span><span>HAZARD — static obstacles you also can't touch</span>
+    </div>
+
+    <button class="btn" id="startBtn">▶ ENTER THE LOOP</button>
+    <button class="btn ghost" id="muteBtnMenu">♪ SOUND ON</button>
+  </div>
+</div>
+
+<!-- Pause -->
+<div class="overlay hidden" id="pauseScreen">
+  <div class="card">
+    <div class="card-head">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span>pause.sys</span>
+      <span>_ □ ×</span>
+    </div>
+    <h2>PAUSED</h2>
+    <p>Timeline frozen.</p>
+    <button class="btn" id="resumeBtn">▶ RESUME</button>
+    <button class="btn ghost" id="restartBtnPause">↻ RESTART</button>
+  </div>
+</div>
+
+<!-- Game over -->
+<div class="overlay hidden" id="gameoverScreen">
+  <div class="card">
+    <div class="card-head">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span>cascade.log</span>
+      <span>_ □ ×</span>
+    </div>
+    <h2 style="color:var(--accent-hot)" id="gameoverTitle">TEMPORAL CASCADE</h2>
+    <p id="gameoverDetail">You collided with your own past.</p>
+    <div class="stat-row">
+      <div>SCORE<strong id="finalScore">000000</strong></div>
+      <div>BEST<strong id="finalBest">000000</strong></div>
+      <div>CYCLES<strong id="finalCycles">0</strong></div>
+    </div>
+    <p id="newBestMsg" style="color:var(--accent-2);margin:4px 0 16px;display:none">✦ NEW LOOP RECORD ✦</p>
+    <p id="scoreStatus" class="score-status" data-state="idle"></p>
+    <button class="btn" id="retryBtn">↻ REWIND</button>
+    <a href="../index.html" class="btn ghost">◀ EXIT</a>
+  </div>
+</div>
+
+<!-- Public scoreboard plumbing -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.105.1"></script>
+<script src="../shared/supabase-config.js"></script>
+<script src="../shared/auth.js"></script>
+<script src="../shared/scores.js"></script>
+
+<script src="shared/arcade.js"></script>
+<script>
+/* =============================================================
+   ECHO SPLIT — top-down survival where your own past actions
+   become future obstacles.
+
+   RECORDING
+     The arena is a fixed-size playfield. Every frame the player's
+     position is sampled into a rolling buffer at SAMPLE_RATE Hz.
+     After RECORD_INTERVAL seconds the buffer is sealed, an echo
+     is spawned, and the buffer resets for the next interval.
+
+   ECHO REPLAY
+     Each echo carries an immutable position list and a duration.
+     Its current position is recording[ floor(t_loop * rate) ]
+     where t_loop = (state.elapsed - echo.bornAt) % duration. Echoes
+     don't move smoothly between samples — they're discrete-step
+     replays — but at 60 Hz sampling, that reads as smooth.
+
+   ECHO LIFE
+     • activeAt  — elapsed time after which the echo can kill you
+                    (small grace so it visibly "boots up" first).
+     • bornAt    — time the echo started looping; phase is
+                    state.elapsed - bornAt mod duration.
+     • Capped at ECHO_CAP simultaneous echoes — when a new one
+       would push past the cap, the OLDEST is evicted. Keeps the
+       arena from clogging into impossibility.
+
+   HAZARDS
+     A handful of static circular pillars. Optional rotating-beam
+     hazard appears later in the run for spatial pressure.
+
+   Slug: echo-split. Internal best-score key: 'es.best'.
+   ============================================================= */
+
+(() => {
+const cvs = document.getElementById('game');
+const ctx = cvs.getContext('2d');
+const W = cvs.width, H = cvs.height;
+
+// ---------- Utilities from shared module ----------
+const { clamp, rand, randInt, pad, color, createAudio, createOverlayManager,
+        wireThemeToggle, fitCanvas } = Arcade;
+
+// ---------- Theme + canvas ----------
+wireThemeToggle('themeToggle');
+fitCanvas(cvs, '.stage', 16);
+
+// ---------- Audio ----------
+const sfx = createAudio('es.muted');
+function moveSfx()    { sfx.beep(440, 0.02, 'square',   0.02); }
+function spawnSfx()   { sfx.noise(0.07, 0.12); sfx.beep(540, 0.10, 'square', 0.07, 880); }
+function cycleSfx()   { sfx.beep(720, 0.06, 'triangle', 0.05, 1180); }
+function deathSfx()   { sfx.noise(0.35, 0.30); sfx.beep(80, 0.5, 'sawtooth', 0.22, 30); }
+
+// ---------- Overlays ----------
+const { show: showOverlay, hideAll: hideOverlays } =
+  createOverlayManager(['startScreen', 'pauseScreen', 'gameoverScreen']);
+
+// ---------- HUD ----------
+const hudScore   = document.getElementById('hudScore');
+const hudTime    = document.getElementById('hudTime');
+const hudBest    = document.getElementById('hudBest');
+const hudCycles  = document.getElementById('hudCycles');
+const hudEchoVal = document.getElementById('hudEchoVal');
+const hudNext    = document.getElementById('hudNext');
+
+// ---------- Constants ----------
+// Arena = the part of the canvas that's inside the neon frame; the
+// player is clamped to this rectangle. Outside is the HUD margin.
+const ARENA_MX = 30;
+const ARENA_MY = 30;
+const ARENA_X0 = ARENA_MX;
+const ARENA_Y0 = ARENA_MY;
+const ARENA_X1 = W - ARENA_MX;
+const ARENA_Y1 = H - ARENA_MY;
+const ARENA_W  = ARENA_X1 - ARENA_X0;
+const ARENA_H  = ARENA_Y1 - ARENA_Y0;
+
+const PLAYER_R    = 9;
+const PLAYER_SP   = 220;             // px/s
+
+const SAMPLE_RATE = 60;              // Hz — echo positions per second
+const RECORD_INTERVAL_BASE = 6.0;    // s, length of first echo's loop
+const RECORD_INTERVAL_STEP = 0.6;    // each new echo records a longer segment...
+const RECORD_INTERVAL_CAP  = 9.0;    // ...up to this ceiling
+const ECHO_R        = 8;
+const ECHO_CAP      = 6;
+const ECHO_ACTIVE_DELAY = 0.6;       // s after spawn before echo can kill
+
+// Score tuning
+const SCORE_PER_SEC      = 10;
+const SCORE_PER_CYCLE    = 50;       // bonus when an echo completes a loop
+const SCORE_ECHO_BONUS   = 0.4;      // multiplier per active echo
+
+// Static hazards — placed inside the arena. Pillars are deadly to
+// touch; they don't move. Coords are absolute canvas pixels.
+const HAZARDS = [
+  { x: ARENA_X0 + ARENA_W * 0.30, y: ARENA_Y0 + ARENA_H * 0.32, r: 22 },
+  { x: ARENA_X0 + ARENA_W * 0.70, y: ARENA_Y0 + ARENA_H * 0.32, r: 22 },
+  { x: ARENA_X0 + ARENA_W * 0.50, y: ARENA_Y0 + ARENA_H * 0.72, r: 26 },
+];
+// Rotating beam appears past this elapsed time
+const BEAM_UNLOCK = 22;
+const BEAM_LEN    = 110;              // px
+const BEAM_OMEGA  = 0.55;             // rad/s
+
+// Death messages — looped-time flavor
+const DEATH_TITLES = [
+  'TEMPORAL CASCADE',
+  'PARADOX EVENT',
+  'ECHO COLLISION',
+  'CAUSAL LOOP CLOSED',
+];
+const DEATH_DETAILS = [
+  'You collided with your own past.',
+  'The loop caught up to you.',
+  'History overwrote the present.',
+  'Time refused another rewrite.',
+];
+
+// ---------- State ----------
+const state = {
+  mode:      'menu',
+  elapsed:   0,
+
+  // Player
+  px:        W / 2,
+  py:        H / 2,
+  vx:        0,
+  vy:        0,
+
+  // Inputs
+  inUp: false, inDown: false, inLeft: false, inRight: false,
+  touchVx: 0, touchVy: 0,
+
+  // Recording
+  recBuffer:    [],            // [{x,y}, ...] sampled at SAMPLE_RATE Hz
+  recStartT:    0,             // elapsed when current recording began
+  recordInterval: RECORD_INTERVAL_BASE,
+  sampleAcc:    0,             // accumulator for fixed-rate sampling
+  trail:        [],            // recent player positions (visual only)
+
+  // Echoes
+  echoes:    [],               // [{ samples, duration, bornAt, activeAt, lastLoop }, ...]
+  echoSpawnIndex: 0,           // total echoes spawned this run
+
+  // Entities
+  particles: [],
+
+  // Score
+  score:     0,
+  cycles:    0,
+  best:      Number(localStorage.getItem('es.best') || 0),
+
+  // Cosmetic
+  flashT:    0,
+  shakeT:    0,
+  spawnFlashT: 0,              // brief overlay flash on echo spawn
+};
+
+// ---------- Reset ----------
+function resetState() {
+  state.mode    = 'playing';
+  state.elapsed = 0;
+  state.px = W / 2;
+  state.py = H / 2;
+  state.vx = 0; state.vy = 0;
+  state.inUp = state.inDown = state.inLeft = state.inRight = false;
+  state.touchVx = 0; state.touchVy = 0;
+  state.recBuffer.length = 0;
+  state.recStartT = 0;
+  state.recordInterval = RECORD_INTERVAL_BASE;
+  state.sampleAcc = 0;
+  state.trail.length = 0;
+  state.echoes.length = 0;
+  state.echoSpawnIndex = 0;
+  state.particles.length = 0;
+  state.score = 0;
+  state.cycles = 0;
+  state.flashT = 0;
+  state.shakeT = 0;
+  state.spawnFlashT = 0;
+  updateHUD();
+}
+
+// ---------- Input ----------
+addEventListener('keydown', e => {
+  if (e.repeat) return;
+  const k = e.key;
+  const lk = k.toLowerCase();
+  if      (lk === 'w' || k === 'ArrowUp')    state.inUp    = true;
+  else if (lk === 's' || k === 'ArrowDown')  state.inDown  = true;
+  else if (lk === 'a' || k === 'ArrowLeft')  state.inLeft  = true;
+  else if (lk === 'd' || k === 'ArrowRight') state.inRight = true;
+  else if (k === ' ' || k === 'Spacebar' || k === 'Enter') {
+    if (state.mode === 'menu' || state.mode === 'gameover') startGame();
+    else if (state.mode === 'paused') { state.mode = 'playing'; hideOverlays(); }
+    e.preventDefault();
+    sfx.init();
+  } else if (lk === 'p' && state.mode !== 'menu') {
+    if (state.mode === 'playing')      { state.mode = 'paused';  showOverlay('pauseScreen'); }
+    else if (state.mode === 'paused')  { state.mode = 'playing'; hideOverlays(); }
+  } else if (lk === 'm') {
+    const muted = sfx.toggle();
+    document.getElementById('muteBtnMenu').textContent = muted ? '♪ SOUND OFF' : '♪ SOUND ON';
+  } else if (lk === 'r' && state.mode !== 'menu') {
+    startGame();
+  }
+  if (lk === 'w' || lk === 'a' || lk === 's' || lk === 'd' ||
+      k === 'ArrowUp' || k === 'ArrowDown' || k === 'ArrowLeft' || k === 'ArrowRight') {
+    e.preventDefault();
+  }
+});
+
+addEventListener('keyup', e => {
+  const k = e.key;
+  const lk = k.toLowerCase();
+  if      (lk === 'w' || k === 'ArrowUp')    state.inUp    = false;
+  else if (lk === 's' || k === 'ArrowDown')  state.inDown  = false;
+  else if (lk === 'a' || k === 'ArrowLeft')  state.inLeft  = false;
+  else if (lk === 'd' || k === 'ArrowRight') state.inRight = false;
+});
+
+// Touch buttons
+function bindHold(btn, fn) {
+  if (!btn) return;
+  const down = (e) => { fn(true);  e.preventDefault(); sfx.init(); };
+  const up   = ()   => { fn(false); };
+  btn.addEventListener('touchstart',  down, { passive: false });
+  btn.addEventListener('touchend',    up);
+  btn.addEventListener('touchcancel', up);
+  btn.addEventListener('mousedown',   down);
+  btn.addEventListener('mouseup',     up);
+  btn.addEventListener('mouseleave',  up);
+}
+bindHold(document.getElementById('tUp'),    v => state.touchVy = v ? -1 : 0);
+bindHold(document.getElementById('tDown'),  v => state.touchVy = v ? +1 : 0);
+bindHold(document.getElementById('tLeft'),  v => state.touchVx = v ? -1 : 0);
+bindHold(document.getElementById('tRight'), v => state.touchVx = v ? +1 : 0);
+
+// Buttons
+document.getElementById('startBtn').addEventListener('click', startGame);
+document.getElementById('retryBtn').addEventListener('click', startGame);
+document.getElementById('resumeBtn').addEventListener('click', () => {
+  state.mode = 'playing'; hideOverlays();
+});
+document.getElementById('restartBtnPause').addEventListener('click', startGame);
+document.getElementById('muteBtnMenu').addEventListener('click', () => {
+  const muted = sfx.toggle();
+  document.getElementById('muteBtnMenu').textContent = muted ? '♪ SOUND OFF' : '♪ SOUND ON';
+});
+
+// ---------- Lifecycle ----------
+function startGame() {
+  resetState();
+  hideOverlays();
+  last = performance.now();
+  sfx.init();
+}
+
+function endGame() {
+  if (state.mode === 'gameover') return;
+  state.mode = 'gameover';
+  const finalScore = Math.floor(state.score);
+  const isBest = finalScore > state.best;
+  if (isBest) {
+    state.best = finalScore;
+    localStorage.setItem('es.best', String(finalScore));
+  }
+  document.getElementById('finalScore').textContent  = pad(finalScore, 6);
+  document.getElementById('finalBest').textContent   = pad(state.best, 6);
+  document.getElementById('finalCycles').textContent = String(state.cycles);
+  document.getElementById('newBestMsg').style.display = isBest ? 'block' : 'none';
+  document.getElementById('gameoverTitle').textContent =
+    DEATH_TITLES[randInt(0, DEATH_TITLES.length - 1)];
+  document.getElementById('gameoverDetail').textContent =
+    DEATH_DETAILS[randInt(0, DEATH_DETAILS.length - 1)];
+  if (window.NostalgiaScores) {
+    window.NostalgiaScores.submitAndReport(
+      'echo-split', finalScore, document.getElementById('scoreStatus')
+    );
+  }
+  showOverlay('gameoverScreen');
+  deathSfx();
+  state.shakeT = 0.6;
+  state.flashT = 0.4;
+  spawnDeathBurst();
+}
+
+// ---------- Echo spawn ----------
+function spawnEcho() {
+  // Seal the current recording into a frozen sample list. The echo's
+  // duration is the recording-interval that was active at this spawn —
+  // future intervals can be longer/shorter; this one stays put.
+  if (state.recBuffer.length < 2) return;     // not enough samples
+  const samples = state.recBuffer.slice();    // copy (immutable from here)
+  const echo = {
+    samples,
+    duration: state.recordInterval,
+    bornAt:   state.elapsed,
+    activeAt: state.elapsed + ECHO_ACTIVE_DELAY,
+    lastLoop: 0,
+    spawnId:  state.echoSpawnIndex++,
+  };
+  // Cap enforcement — evict the OLDEST so the arena stays survivable.
+  state.echoes.push(echo);
+  while (state.echoes.length > ECHO_CAP) state.echoes.shift();
+
+  // Glitch / burst at the echo's first frame
+  const first = samples[0];
+  spawnEchoSpawnBurst(first.x, first.y);
+  spawnSfx();
+  state.spawnFlashT = 0.25;
+
+  // Reset recording for the next interval; bump the interval length
+  state.recBuffer.length = 0;
+  state.recStartT = state.elapsed;
+  state.recordInterval = Math.min(
+    RECORD_INTERVAL_CAP,
+    state.recordInterval + RECORD_INTERVAL_STEP
+  );
+}
+
+function echoPosAt(echo, t) {
+  // t in [0, duration). Returns sample index (with wrap-around).
+  const idx = Math.floor(t * SAMPLE_RATE);
+  const s = echo.samples;
+  if (idx < 0) return s[0];
+  if (idx >= s.length) return s[s.length - 1];
+  return s[idx];
+}
+
+// ---------- Update ----------
+function update(dt) {
+  if (state.mode !== 'playing') return;
+  state.elapsed += dt;
+
+  // ---- Movement input ----
+  let mx = 0, my = 0;
+  if (state.inLeft)  mx -= 1;
+  if (state.inRight) mx += 1;
+  if (state.inUp)    my -= 1;
+  if (state.inDown)  my += 1;
+  if (state.touchVx) mx = state.touchVx;
+  if (state.touchVy) my = state.touchVy;
+
+  if (mx !== 0 || my !== 0) {
+    const len = Math.hypot(mx, my);
+    mx /= len; my /= len;
+    state.vx = mx * PLAYER_SP;
+    state.vy = my * PLAYER_SP;
+  } else {
+    state.vx = 0; state.vy = 0;
+  }
+  state.px += state.vx * dt;
+  state.py += state.vy * dt;
+
+  // Clamp inside the arena (walls are non-deadly, just hard stops)
+  state.px = clamp(state.px, ARENA_X0 + PLAYER_R, ARENA_X1 - PLAYER_R);
+  state.py = clamp(state.py, ARENA_Y0 + PLAYER_R, ARENA_Y1 - PLAYER_R);
+
+  // ---- Sampling for the rolling recording ----
+  state.sampleAcc += dt;
+  const sampleStep = 1 / SAMPLE_RATE;
+  while (state.sampleAcc >= sampleStep) {
+    state.sampleAcc -= sampleStep;
+    state.recBuffer.push({ x: state.px, y: state.py });
+  }
+  // When the recording fills its allotted interval, seal it into an echo
+  if ((state.elapsed - state.recStartT) >= state.recordInterval) {
+    spawnEcho();
+  }
+
+  // ---- Visual trail (last ~30 frames) ----
+  state.trail.push({ x: state.px, y: state.py, life: 0.4 });
+  if (state.trail.length > 24) state.trail.shift();
+  for (const t of state.trail) t.life -= dt;
+
+  // ---- Echo cycle counting (each completion = bonus + sfx) ----
+  for (const echo of state.echoes) {
+    const tLoop = (state.elapsed - echo.bornAt) % echo.duration;
+    const loopCount = Math.floor((state.elapsed - echo.bornAt) / echo.duration);
+    if (loopCount > echo.lastLoop) {
+      echo.lastLoop = loopCount;
+      state.cycles++;
+      state.score += SCORE_PER_CYCLE;
+      cycleSfx();
+    }
+  }
+
+  // ---- Collisions ----
+  // Player vs hazards (always deadly)
+  for (const h of HAZARDS) {
+    const dx = state.px - h.x, dy = state.py - h.y;
+    if (dx * dx + dy * dy < (PLAYER_R + h.r - 1) * (PLAYER_R + h.r - 1)) {
+      return endGame();
+    }
+  }
+  // Player vs rotating beam (post-unlock)
+  if (state.elapsed >= BEAM_UNLOCK) {
+    const cx = ARENA_X0 + ARENA_W / 2;
+    const cy = ARENA_Y0 + ARENA_H / 2;
+    const ang = state.elapsed * BEAM_OMEGA;
+    if (pointToSegmentDist(
+      state.px, state.py,
+      cx - Math.cos(ang) * BEAM_LEN, cy - Math.sin(ang) * BEAM_LEN,
+      cx + Math.cos(ang) * BEAM_LEN, cy + Math.sin(ang) * BEAM_LEN
+    ) < PLAYER_R + 4) {
+      return endGame();
+    }
+  }
+  // Player vs echo
+  for (const echo of state.echoes) {
+    if (state.elapsed < echo.activeAt) continue;
+    const tLoop = (state.elapsed - echo.bornAt) % echo.duration;
+    const pos = echoPosAt(echo, tLoop);
+    const dx = state.px - pos.x, dy = state.py - pos.y;
+    if (dx * dx + dy * dy < (PLAYER_R + ECHO_R - 2) * (PLAYER_R + ECHO_R - 2)) {
+      return endGame();
+    }
+  }
+
+  // ---- Particles ----
+  for (let i = state.particles.length - 1; i >= 0; i--) {
+    const p = state.particles[i];
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    p.vx *= 0.92; p.vy *= 0.92;
+    p.life -= dt;
+    if (p.life <= 0) state.particles.splice(i, 1);
+  }
+
+  // ---- Score per second (scaled by active echo count) ----
+  const mult = 1 + state.echoes.length * SCORE_ECHO_BONUS;
+  state.score += SCORE_PER_SEC * mult * dt;
+
+  // Cosmetic decay
+  if (state.flashT > 0)      state.flashT      = Math.max(0, state.flashT - dt);
+  if (state.shakeT > 0)      state.shakeT      = Math.max(0, state.shakeT - dt);
+  if (state.spawnFlashT > 0) state.spawnFlashT = Math.max(0, state.spawnFlashT - dt);
+
+  updateHUD();
+}
+
+function pointToSegmentDist(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq < 1e-6) {
+    const ex = px - x1, ey = py - y1;
+    return Math.hypot(ex, ey);
+  }
+  let t = ((px - x1) * dx + (py - y1) * dy) / lenSq;
+  t = clamp(t, 0, 1);
+  const cx = x1 + t * dx, cy = y1 + t * dy;
+  return Math.hypot(px - cx, py - cy);
+}
+
+function spawnEchoSpawnBurst(x, y) {
+  for (let i = 0; i < 16; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const sp = rand(80, 240);
+    state.particles.push({
+      x, y,
+      vx: Math.cos(a) * sp,
+      vy: Math.sin(a) * sp,
+      life: 0.5, max: 0.5,
+      glyph: Math.random() < 0.5 ? '0' : '1',
+      color: '--echo-trail',
+    });
+  }
+}
+
+function spawnDeathBurst() {
+  for (let i = 0; i < 30; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const sp = rand(100, 300);
+    state.particles.push({
+      x: state.px, y: state.py,
+      vx: Math.cos(a) * sp,
+      vy: Math.sin(a) * sp,
+      life: 0.7, max: 0.7,
+      glyph: Math.random() < 0.5 ? '0' : '1',
+      color: i % 2 ? '--player-trail' : '--echo-trail',
+    });
+  }
+}
+
+// ---------- HUD ----------
+function updateHUD() {
+  hudScore.textContent  = pad(Math.floor(state.score), 6);
+  hudTime.textContent   = state.elapsed.toFixed(1) + 's';
+  hudBest.textContent   = pad(state.best, 6);
+  hudCycles.textContent = String(state.cycles);
+  hudEchoVal.textContent = state.echoes.length + '/' + ECHO_CAP;
+  const remaining = Math.max(0, state.recordInterval - (state.elapsed - state.recStartT));
+  hudNext.textContent = remaining.toFixed(1) + 's';
+}
+
+// ---------- Render ----------
+function render() {
+  let shx = 0, shy = 0;
+  if (state.shakeT > 0) {
+    shx = (Math.random() - 0.5) * 6;
+    shy = (Math.random() - 0.5) * 4;
+  }
+  ctx.save();
+  ctx.translate(shx, shy);
+
+  drawBackground();
+  drawArena();
+  drawHazards();
+  drawBeam();
+  drawEchoTrails();
+  drawEchoes();
+  drawPlayerTrail();
+  drawPlayer();
+  drawTimelineBar();
+  drawParticles();
+  drawSpawnFlash();
+  drawDeathFlash();
+  drawScanlines();
+
+  ctx.restore();
+}
+
+function drawBackground() {
+  const grad = ctx.createRadialGradient(W / 2, H / 2, 60, W / 2, H / 2, W * 0.7);
+  grad.addColorStop(0, color('--bg-mid'));
+  grad.addColorStop(1, color('--bg-deep'));
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+  // Stars
+  ctx.fillStyle = color('--star');
+  for (let i = 0; i < 50; i++) {
+    const seed = i * 53.13;
+    const x = (seed * 97) % W;
+    const y = (seed * 41) % H;
+    ctx.globalAlpha = 0.25 + (i % 5) * 0.08;
+    ctx.fillRect(x | 0, y | 0, i % 7 === 0 ? 2 : 1, 1);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawArena() {
+  // Frame
+  ctx.strokeStyle = color('--arena-frame');
+  ctx.lineWidth = 2;
+  ctx.strokeRect(ARENA_X0, ARENA_Y0, ARENA_W, ARENA_H);
+  // Faint inner grid
+  ctx.strokeStyle = color('--arena-line');
+  ctx.lineWidth = 1;
+  ctx.globalAlpha = 0.55;
+  ctx.beginPath();
+  for (let x = ARENA_X0 + 60; x < ARENA_X1; x += 60) {
+    ctx.moveTo(x, ARENA_Y0); ctx.lineTo(x, ARENA_Y1);
+  }
+  for (let y = ARENA_Y0 + 60; y < ARENA_Y1; y += 60) {
+    ctx.moveTo(ARENA_X0, y); ctx.lineTo(ARENA_X1, y);
+  }
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
+function drawHazards() {
+  for (const h of HAZARDS) {
+    // Aura
+    ctx.globalAlpha = 0.3;
+    ctx.fillStyle = color('--hazard');
+    ctx.beginPath();
+    ctx.arc(h.x, h.y, h.r + 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    // Body
+    ctx.fillStyle = color('--hazard');
+    ctx.beginPath();
+    ctx.arc(h.x, h.y, h.r, 0, Math.PI * 2);
+    ctx.fill();
+    // Inner core
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.beginPath();
+    ctx.arc(h.x, h.y, h.r - 5, 0, Math.PI * 2);
+    ctx.fill();
+    // Tiny center dot
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(h.x - 1, h.y - 1, 2, 2);
+  }
+}
+
+function drawBeam() {
+  if (state.elapsed < BEAM_UNLOCK) return;
+  const cx = ARENA_X0 + ARENA_W / 2;
+  const cy = ARENA_Y0 + ARENA_H / 2;
+  const ang = state.elapsed * BEAM_OMEGA;
+  const x1 = cx - Math.cos(ang) * BEAM_LEN;
+  const y1 = cy - Math.sin(ang) * BEAM_LEN;
+  const x2 = cx + Math.cos(ang) * BEAM_LEN;
+  const y2 = cy + Math.sin(ang) * BEAM_LEN;
+  // Beam glow + core
+  ctx.strokeStyle = color('--hazard');
+  ctx.lineCap = 'round';
+  ctx.globalAlpha = 0.35;
+  ctx.lineWidth = 14;
+  ctx.beginPath();
+  ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
+  ctx.stroke();
+  // Center hub
+  ctx.fillStyle = color('--hazard');
+  ctx.beginPath();
+  ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawEchoTrails() {
+  // Each echo paints a dotted backbone of its recorded path. The
+  // most-recently-spawned echo — i.e. the one currently in its first
+  // loop — renders BRIGHT and dense so the player can read where
+  // their freshly-minted ghost is about to trace and plan the next
+  // recording around it. After one full loop cycle the trail fades
+  // smoothly to the ambient dim level, so older ghosts still hint
+  // at their path without overwhelming the visual.
+  ctx.fillStyle = color('--echo-trail');
+  for (const echo of state.echoes) {
+    const ageCycles = (state.elapsed - echo.bornAt) / echo.duration;
+    let alpha, step, size;
+    if (ageCycles < 1) {
+      // Fresh trail — full visibility, denser sampling, 2-px dots
+      alpha = 0.6;
+      step  = 3;
+      size  = 2;
+    } else if (ageCycles < 2) {
+      // Smooth fade across the second cycle so the change feels gradual
+      alpha = 0.6 - (ageCycles - 1) * 0.4;     // 0.6 → 0.2
+      step  = 4;
+      size  = 1;
+    } else {
+      // Settled — ambient dotted backbone (the original behavior)
+      alpha = 0.2;
+      step  = 6;
+      size  = 1;
+    }
+    ctx.globalAlpha = alpha;
+    for (let i = 0; i < echo.samples.length; i += step) {
+      const s = echo.samples[i];
+      ctx.fillRect((s.x - (size === 2 ? 1 : 0)) | 0,
+                   (s.y - (size === 2 ? 1 : 0)) | 0, size, size);
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawEchoes() {
+  for (const echo of state.echoes) {
+    const tLoop = (state.elapsed - echo.bornAt) % echo.duration;
+    const pos = echoPosAt(echo, tLoop);
+    const isActive = state.elapsed >= echo.activeAt;
+    const baseAlpha = isActive ? 0.85 : 0.45;
+    // Halo
+    ctx.globalAlpha = 0.35 * baseAlpha;
+    ctx.fillStyle = color('--echo-body');
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, ECHO_R + 4, 0, Math.PI * 2);
+    ctx.fill();
+    // Body — semi-transparent
+    ctx.globalAlpha = baseAlpha;
+    ctx.fillStyle = color('--echo-body');
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, ECHO_R, 0, Math.PI * 2);
+    ctx.fill();
+    // Inner ring
+    ctx.globalAlpha = baseAlpha * 0.9;
+    ctx.strokeStyle = color('--echo-trail');
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, ECHO_R - 2, 0, Math.PI * 2);
+    ctx.stroke();
+    // Pre-active dotted ring so it reads as "warming up"
+    if (!isActive) {
+      ctx.globalAlpha = 0.6 + Math.sin(state.elapsed * 18) * 0.3;
+      ctx.setLineDash([3, 3]);
+      ctx.strokeStyle = color('--echo-body');
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, ECHO_R + 6, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawPlayerTrail() {
+  for (const t of state.trail) {
+    ctx.globalAlpha = Math.max(0, t.life / 0.4) * 0.55;
+    ctx.fillStyle = color('--player-trail');
+    ctx.fillRect((t.x - 1) | 0, (t.y - 1) | 0, 2, 2);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawPlayer() {
+  // Glow
+  ctx.globalAlpha = 0.45;
+  ctx.fillStyle = color('--player-glow');
+  ctx.beginPath();
+  ctx.arc(state.px, state.py, PLAYER_R + 4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  // Body
+  ctx.fillStyle = color('--player-body');
+  ctx.beginPath();
+  ctx.arc(state.px, state.py, PLAYER_R, 0, Math.PI * 2);
+  ctx.fill();
+  // Bright core
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(state.px - 1, state.py - 1, 2, 2);
+}
+
+function drawTimelineBar() {
+  // Timeline at the top of the arena: progress through the current
+  // recording window. When it fills, the next echo spawns.
+  const x = ARENA_X0;
+  const y = ARENA_Y0 - 12;
+  const w = ARENA_W;
+  const h = 6;
+  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  ctx.fillRect(x, y, w, h);
+  const progress = clamp(
+    (state.elapsed - state.recStartT) / state.recordInterval, 0, 1);
+  ctx.fillStyle = color('--rec-tick');
+  ctx.fillRect(x + 1, y + 1, (w - 2) * progress, h - 2);
+  ctx.strokeStyle = color('--arena-line');
+  ctx.strokeRect(x, y, w, h);
+  // REC dot to the right of the bar
+  ctx.fillStyle = color('--rec-tick');
+  ctx.globalAlpha = 0.4 + Math.sin(state.elapsed * 6) * 0.4;
+  ctx.beginPath();
+  ctx.arc(x + w + 8, y + h / 2, 3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = color('--rec-tick');
+  ctx.font = "8px 'Press Start 2P', monospace";
+  ctx.textAlign = 'left';
+  ctx.fillText('REC', x + w + 14, y + h - 1);
+}
+
+function drawParticles() {
+  ctx.font = "9px 'JetBrains Mono', monospace";
+  ctx.textBaseline = 'top';
+  for (const p of state.particles) {
+    ctx.globalAlpha = Math.max(0, p.life / p.max);
+    ctx.fillStyle = color(p.color);
+    ctx.fillText(p.glyph, p.x, p.y);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawSpawnFlash() {
+  if (state.spawnFlashT <= 0) return;
+  const t = state.spawnFlashT / 0.25;
+  ctx.globalAlpha = t * 0.35;
+  ctx.fillStyle = color('--echo-body');
+  ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = 1;
+}
+
+function drawDeathFlash() {
+  if (state.flashT <= 0) return;
+  const t = state.flashT / 0.4;
+  ctx.globalAlpha = t * 0.45;
+  ctx.fillStyle = color('--hazard');
+  ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = 1;
+}
+
+function drawScanlines() {
+  ctx.globalAlpha = 0.05;
+  ctx.fillStyle = '#ffffff';
+  for (let y = 0; y < H; y += 3) ctx.fillRect(0, y, W, 1);
+  ctx.globalAlpha = 1;
+}
+
+// ---------- Main loop ----------
+let last = performance.now();
+const MAX_DT = 1 / 30;
+function frame(now) {
+  let dt = (now - last) / 1000;
+  last = now;
+  if (dt > MAX_DT) dt = MAX_DT;
+  update(dt);
+  render();
+  requestAnimationFrame(frame);
+}
+
+resetState();
+state.mode = 'menu';
+showOverlay('startScreen');
+updateHUD();
+requestAnimationFrame(frame);
+
+})();
+</script>
+</body>
+</html>

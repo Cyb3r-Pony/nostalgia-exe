@@ -1,0 +1,1267 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>OverDrive — Nostalgia.exe</title>
+<link rel="icon" type="image/svg+xml" href="../favicon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=Press+Start+2P&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="shared/arcade.css" />
+<style>
+  /* ==========================================================
+     OVERDRIVE — game-specific overrides. Shared chrome from
+     arcade.css. Synthwave-leaning palette: hot-pink chassis on a
+     deep-purple highway with a neon sun on the horizon.
+     ========================================================== */
+  :root {
+    --player-body:  #ff4fa1;
+    --player-glow:  #ffa8d1;
+    --player-dark:  #a8266a;
+    --player-under: #5ff0c9;
+    --road-a:       #14082b;
+    --road-b:       #1c0e3a;
+    --rumble-a:     #ff4fa1;
+    --rumble-b:     #5ff0c9;
+    --lane-line:    #ffd86b;
+    --horizon-1:    #ff4fa1;
+    --horizon-2:    #ffd86b;
+    --sky-top:      #060218;
+    --sky-mid:      #2a0d50;
+    --grid-line:    #b388ff;
+    --traffic-1:    #5ff0c9;
+    --traffic-2:    #ffd86b;
+    --traffic-3:    #b388ff;
+    --traffic-4:    #4ea5ff;
+    --barrier:      #ff4fa1;
+    --firewall:     #ff7a30;
+    --glitch:       #b388ff;
+    --boost-trail:  #ffd86b;
+    --bg-deep:      #0a0520;
+    --star:         #b388ff;
+  }
+  [data-theme="light"] {
+    --player-body:  #c03a7a;
+    --player-glow:  #e879ae;
+    --player-dark:  #7a2450;
+    --player-under: #1aa88a;
+    --road-a:       #786298;
+    --road-b:       #6e5890;
+    --rumble-a:     #c03a7a;
+    --rumble-b:     #1aa88a;
+    --lane-line:    #b88500;
+    --horizon-1:    #c03a7a;
+    --horizon-2:    #c68300;
+    --sky-top:      #d8c8e8;
+    --sky-mid:      #b8a0d0;
+    --grid-line:    #6e5890;
+    --traffic-1:    #1aa88a;
+    --traffic-2:    #b88500;
+    --traffic-3:    #7a58b0;
+    --traffic-4:    #2f7cc8;
+    --barrier:      #c03a7a;
+    --firewall:     #d05010;
+    --glitch:       #7a58b0;
+    --boost-trail:  #b88500;
+    --bg-deep:      #c8b8e0;
+    --star:         #6e5890;
+  }
+
+  canvas { max-width: 100%; max-height: 100%; image-rendering: pixelated; }
+
+  .controls-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 6px 14px;
+    margin: 18px 0 22px;
+    text-align: left;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .controls-grid kbd {
+    background: var(--panel-2);
+    border: 1px solid var(--text);
+    padding: 2px 6px;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 9px;
+    min-width: 44px;
+    text-align: center;
+  }
+
+  /* Side-by-side touch buttons. Left cluster handles steering; right
+     cluster handles boost. Layout matches the shared touch wrapper. */
+  .touch .left-cluster { display:flex; gap:8px; }
+</style>
+</head>
+<body>
+
+<div class="bg-grid"></div>
+<div class="scanlines"></div>
+
+<header class="topbar">
+  <a href="../index.html" class="back">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    EXIT
+  </a>
+  <div class="title-tag">OVERDRIVE<span class="ver">v1.0.0 // PULSE.RIDE</span></div>
+  <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme"></button>
+</header>
+
+<section class="hud" id="hud">
+  <div class="hud-col">
+    <div class="hud-stat score">SCORE<strong id="hudScore">000000</strong></div>
+    <div class="hud-stat">DIST<strong id="hudDist">0000m</strong></div>
+  </div>
+  <div class="hud-col">
+    <div class="hud-stat best">BEST<strong id="hudBest">000000</strong></div>
+    <div class="hud-stat">SPEED<strong id="hudSpeed">1.0x</strong></div>
+  </div>
+  <div class="hud-col">
+    <div class="hud-stat">BOOST<strong id="hudBoost">4.0s</strong></div>
+    <div class="hud-stat">NEAR<strong id="hudNear">0</strong></div>
+  </div>
+</section>
+
+<div class="stage">
+  <canvas id="game" width="900" height="360"></canvas>
+</div>
+
+<footer class="bottombar">
+  <div class="keys">
+    <span><kbd>← →</kbd> STEER</span>
+    <span><kbd>SPACE</kbd> BOOST</span>
+    <span><kbd>↓</kbd> BRAKE</span>
+    <span><kbd>P</kbd> PAUSE</span>
+    <span><kbd>M</kbd> MUTE</span>
+    <span><kbd>R</kbd> RESTART</span>
+  </div>
+  <div>© NOSTALGIA.EXE — <span class="blink">█</span></div>
+</footer>
+
+<div class="touch" id="touch">
+  <div class="left-cluster">
+    <button id="tLeft"  aria-label="Steer left">◀</button>
+    <button id="tRight" aria-label="Steer right">▶</button>
+  </div>
+  <div class="right-cluster">
+    <button id="tBoost" aria-label="Boost">▲</button>
+  </div>
+</div>
+
+<!-- Start menu -->
+<div class="overlay" id="startScreen">
+  <div class="card">
+    <div class="card-head">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span>overdrive.app</span>
+      <span>_ □ ×</span>
+    </div>
+    <h1>OVERDRIVE</h1>
+    <p>Pulse Rider on the data highway. Weave through traffic, dodge firewalls, never let go of the throttle. Buzz traffic close for near-miss bonuses.</p>
+
+    <div class="controls-grid">
+      <kbd>← / A</kbd><span>steer left</span>
+      <kbd>→ / D</kbd><span>steer right</span>
+      <kbd>SPACE</kbd><span>overdrive boost (drains the reserve, regens when off)</span>
+      <kbd>↓ / S</kbd><span>brake (slows scroll for tight gaps)</span>
+      <kbd>P</kbd><span>pause</span>
+    </div>
+
+    <button class="btn" id="startBtn">▶ HIT THE STREAM</button>
+    <button class="btn ghost" id="muteBtnMenu">♪ SOUND ON</button>
+  </div>
+</div>
+
+<!-- Pause -->
+<div class="overlay hidden" id="pauseScreen">
+  <div class="card">
+    <div class="card-head">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span>pause.sys</span>
+      <span>_ □ ×</span>
+    </div>
+    <h2>PAUSED</h2>
+    <p>Engine idling.</p>
+    <button class="btn" id="resumeBtn">▶ RESUME</button>
+    <button class="btn ghost" id="restartBtnPause">↻ RESTART</button>
+  </div>
+</div>
+
+<!-- Game over -->
+<div class="overlay hidden" id="gameoverScreen">
+  <div class="card">
+    <div class="card-head">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span>wreck.log</span>
+      <span>_ □ ×</span>
+    </div>
+    <h2 style="color:var(--accent-hot)">FRAGGED</h2>
+    <p>The pulse scattered against the firewall.</p>
+    <div class="stat-row">
+      <div>SCORE<strong id="finalScore">000000</strong></div>
+      <div>BEST<strong id="finalBest">000000</strong></div>
+      <div>DIST<strong id="finalDist">0000m</strong></div>
+    </div>
+    <p id="newBestMsg" style="color:var(--accent-2);margin:4px 0 16px;display:none">✦ NEW BEST ✦</p>
+    <p id="scoreStatus" class="score-status" data-state="idle"></p>
+    <button class="btn" id="retryBtn">↻ RETRY</button>
+    <a href="../index.html" class="btn ghost">◀ EXIT</a>
+  </div>
+</div>
+
+<!-- Public scoreboard plumbing -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.105.1"></script>
+<script src="../shared/supabase-config.js"></script>
+<script src="../shared/auth.js"></script>
+<script src="../shared/scores.js"></script>
+
+<script src="shared/arcade.js"></script>
+<script>
+/* =============================================================
+   OVERDRIVE — pseudo-3D arcade highway runner.
+
+   The player ("Pulse Rider") cruises a 4-lane data highway. World
+   scrolls toward camera; player only controls lateral steering and
+   an optional brake / boost. One-hit collisions with traffic or
+   obstacles end the run.
+
+   PROJECTION
+     Pinhole-like: screen_x = W/2 + x * F / z, where x is world-x
+     and z is forward distance from the camera. Ground rows fall on
+     screen_y = HORIZON_Y + CAM_H * F / z. Z_NEAR is the smallest
+     drawable z (where the ground touches the bottom edge); player
+     uses that scale for its on-screen size and lateral offset.
+
+   OBSTACLES
+     • car      slower bot vehicle in a lane
+     • barrier  striped solid block (default obstacle)
+     • firewall flickering orange wall (mid-game+)
+     • glitch   sliced purple rectangle (late-game+)
+
+   SCORE
+     score = floor(distance / METER_PX)        (per-meter)
+           + SCORE_NEAR_MISS per buzzed traffic
+   ============================================================= */
+
+(() => {
+const cvs = document.getElementById('game');
+const ctx = cvs.getContext('2d');
+const W = cvs.width, H = cvs.height;
+
+// ---------- Utilities from shared module ----------
+const { clamp, rand, randInt, pad, color, createAudio, createOverlayManager,
+        wireThemeToggle, fitCanvas } = Arcade;
+
+// ---------- Theme ----------
+wireThemeToggle('themeToggle');
+fitCanvas(cvs, '.stage', 16);
+
+// ---------- Audio ----------
+const sfx = createAudio('overdrive.muted');
+function engineSfx()   { sfx.beep(150 + state.speed * 0.2, 0.03, 'sawtooth', 0.025); }
+function nearMissSfx() { sfx.beep(900, 0.08, 'square',   0.06, 1300); }
+function crashSfx()    { sfx.noise(0.4, 0.4); sfx.beep(80, 0.5, 'sawtooth', 0.22, 30); }
+
+// ---------- Background music engine ----------
+// Original 4-bar synthwave loop scheduled ahead via Web Audio. The
+// progression is a generic minor-key i-VI-VII-V (Am – F – G – Em),
+// which is just a common chord shape — not lifted from any track.
+// Each bar is 16 sixteenth-notes at 120 BPM.
+//
+// Voices:
+//   bass  – sawtooth root note, low-passed, half-bar duration
+//   arp   – triangle arpeggio outlining the chord triad
+//   kick  – sine pitch-drop on every quarter beat
+//   hat   – brief filtered noise burst on every 8th
+//
+// scheduleAhead() is called every frame from the main loop. It only
+// schedules notes within a ~250ms look-ahead window, which keeps
+// timing tight even when the rAF tab pauses briefly.
+const music = {
+  ctx: null,
+  running: false,
+  startTime: 0,
+  nextStep: 0,         // absolute step counter since start
+  nextNoteTime: 0,     // ctx.currentTime of the next step
+  bpm: 118,
+};
+
+// MIDI helpers — we work in MIDI numbers and convert at scheduling
+// time. C4 = 60.
+function midiToFreq(m) { return 440 * Math.pow(2, (m - 69) / 12); }
+
+// 4-bar loop: each bar uses one chord. Bass plays the chord root
+// twice per bar (on beats 1 and 3); arpeggio cycles the triad.
+const BARS = [
+  { root: 45, triad: [57, 60, 64] },  // A2 root, A minor triad up an octave
+  { root: 41, triad: [53, 57, 60] },  // F2 root, F major triad
+  { root: 43, triad: [55, 59, 62] },  // G2 root, G major triad
+  { root: 40, triad: [52, 55, 59] },  // E2 root, E minor triad
+];
+
+function musicStart() {
+  if (music.running) return;
+  if (!music.ctx) {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    music.ctx = new Ctx();
+  }
+  if (music.ctx.state === 'suspended') music.ctx.resume();
+  music.running = true;
+  music.nextStep = 0;
+  music.nextNoteTime = music.ctx.currentTime + 0.08;
+}
+
+function musicStop() {
+  music.running = false;
+  // In-flight notes decay naturally — no need to abort them.
+}
+
+function musicTick() {
+  if (!music.running || !music.ctx) return;
+  if (sfx.muted) return;             // mute respects shared toggle
+  const stepDur = 60 / music.bpm / 4;       // sixteenth note
+  const horizon = music.ctx.currentTime + 0.25;
+  while (music.nextNoteTime < horizon) {
+    scheduleStep(music.nextStep, music.nextNoteTime, stepDur);
+    music.nextNoteTime += stepDur;
+    music.nextStep++;
+  }
+}
+
+function scheduleStep(step, time, stepDur) {
+  const inBar = step % 16;             // 0..15
+  const barIdx = Math.floor(step / 16) % BARS.length;
+  const bar = BARS[barIdx];
+
+  // Bass — beats 1 and 3 (steps 0, 8). Held half-bar.
+  if (inBar === 0 || inBar === 8) {
+    playSynthBass(bar.root, time, stepDur * 7.5);
+  }
+
+  // Arpeggio — every other 16th, triad cycling. Slight upward
+  // octave bump on bar boundary so the loop doesn't feel flat.
+  if (inBar % 2 === 0) {
+    const arpIdx = (inBar / 2) % bar.triad.length;
+    const note = bar.triad[arpIdx] + (inBar >= 8 ? 12 : 0);
+    playArp(note, time, stepDur * 1.6);
+  }
+
+  // Kick — every quarter beat (steps 0, 4, 8, 12).
+  if (inBar % 4 === 0) {
+    playKick(time);
+  }
+
+  // Hi-hat — every 8th, off-beat slightly louder.
+  if (inBar % 2 === 1) {
+    playHat(time, inBar % 4 === 1 ? 0.025 : 0.014);
+  }
+}
+
+function playSynthBass(midi, time, dur) {
+  const ctx2 = music.ctx;
+  const freq = midiToFreq(midi);
+  const osc = ctx2.createOscillator();
+  const filt = ctx2.createBiquadFilter();
+  const g = ctx2.createGain();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(freq, time);
+  filt.type = 'lowpass';
+  filt.frequency.setValueAtTime(380, time);
+  filt.Q.setValueAtTime(6, time);
+  g.gain.setValueAtTime(0, time);
+  g.gain.linearRampToValueAtTime(0.07, time + 0.015);
+  g.gain.exponentialRampToValueAtTime(0.0001, time + dur);
+  osc.connect(filt).connect(g).connect(ctx2.destination);
+  osc.start(time);
+  osc.stop(time + dur + 0.05);
+}
+
+function playArp(midi, time, dur) {
+  const ctx2 = music.ctx;
+  const freq = midiToFreq(midi);
+  const osc = ctx2.createOscillator();
+  const g = ctx2.createGain();
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(freq, time);
+  g.gain.setValueAtTime(0, time);
+  g.gain.linearRampToValueAtTime(0.045, time + 0.005);
+  g.gain.exponentialRampToValueAtTime(0.0001, time + dur);
+  osc.connect(g).connect(ctx2.destination);
+  osc.start(time);
+  osc.stop(time + dur + 0.05);
+}
+
+function playKick(time) {
+  const ctx2 = music.ctx;
+  const dur = 0.18;
+  const osc = ctx2.createOscillator();
+  const g = ctx2.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(120, time);
+  osc.frequency.exponentialRampToValueAtTime(40, time + dur);
+  g.gain.setValueAtTime(0.18, time);
+  g.gain.exponentialRampToValueAtTime(0.0001, time + dur);
+  osc.connect(g).connect(ctx2.destination);
+  osc.start(time);
+  osc.stop(time + dur);
+}
+
+function playHat(time, vol) {
+  const ctx2 = music.ctx;
+  const dur = 0.05;
+  const buf = ctx2.createBuffer(1, Math.floor(ctx2.sampleRate * dur), ctx2.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  const src = ctx2.createBufferSource();
+  const filt = ctx2.createBiquadFilter();
+  const g = ctx2.createGain();
+  src.buffer = buf;
+  filt.type = 'highpass';
+  filt.frequency.setValueAtTime(7000, time);
+  g.gain.setValueAtTime(vol, time);
+  g.gain.exponentialRampToValueAtTime(0.0001, time + dur);
+  src.connect(filt).connect(g).connect(ctx2.destination);
+  src.start(time);
+  src.stop(time + dur + 0.02);
+}
+
+// Alias used by the gameover handler
+function stopMusic() { musicStop(); }
+
+// ---------- Overlays ----------
+const { show: showOverlay, hideAll: hideOverlays } =
+  createOverlayManager(['startScreen', 'pauseScreen', 'gameoverScreen']);
+
+// ---------- HUD ----------
+const hudScore = document.getElementById('hudScore');
+const hudDist  = document.getElementById('hudDist');
+const hudBest  = document.getElementById('hudBest');
+const hudSpeed = document.getElementById('hudSpeed');
+const hudBoost = document.getElementById('hudBoost');
+const hudNear  = document.getElementById('hudNear');
+
+// ---------- Constants ----------
+const HORIZON_Y   = Math.round(H * 0.40);   // 144 for H=360
+const F           = 180;                    // focal length
+const CAM_H       = 80;                     // camera height above ground
+const Z_NEAR      = (F * CAM_H) / (H - HORIZON_Y);  // nearest visible z
+const Z_FAR       = 1500;
+const Z_SPAWN     = Z_FAR * 0.85;
+const LANES       = 4;
+const ROAD_HALF   = 128;                    // road extends ±128 in world-x
+const LANE_WIDTH  = (2 * ROAD_HALF) / LANES;
+const STRIPE_LEN  = 30;                     // world z per tarmac stripe
+const METER_PX    = 20;                     // 20 world-z units per "meter"
+
+// Speed dynamics — slow start, gentle ramp to keep early reads clear.
+const BASE_SPEED  = 130;
+const SPEED_PER_S = 1.6;
+const SPEED_CAP   = 340;
+
+// Steering — tuned for "snappy but not twitchy". Steer rate scales
+// down a little at high speed so over-correcting doesn't drift you
+// into the next lane.
+const STEER_SPEED = 230;          // world x per second
+const PLAYER_W    = 28;
+const PLAYER_LEN_Z = 18;
+
+// Boost / brake
+const BOOST_MUL   = 1.55;
+const BRAKE_MUL   = 0.55;
+const BOOST_MAX   = 4.0;
+const BOOST_DRAIN = 1.0;          // seconds of reserve drained per second
+const BOOST_REGEN = 0.5;
+
+// Score
+const SCORE_NEAR_MISS = 50;
+
+// ---------- State ----------
+const state = {
+  mode:      'menu',        // 'menu' | 'playing' | 'paused' | 'gameover'
+  elapsed:   0,
+  distance:  0,             // world z travelled
+  speed:     BASE_SPEED,
+
+  // Player
+  px:        0,             // world x ∈ [-ROAD_HALF, +ROAD_HALF]
+  tilt:      0,             // -1..+1 visual roll easing toward steerDir
+
+  // Input flags
+  steerLeft:  false,
+  steerRight: false,
+  brake:      false,
+  boostHeld:  false,
+
+  // Boost reserve
+  boostReserve: BOOST_MAX,
+  boosting:     false,
+
+  // Entities
+  cars:      [],            // {kind:'car',     x, lane, z, vSpeed, w, lenZ, color, passed}
+  obstacles: [],            // {kind, x, lane, z, w, lenZ}
+  particles: [],            // {x, y, vx, vy, life, max, glyph, color}
+  stars:     [],            // backdrop dots {x, y, sz}
+
+  // Score
+  score:     0,
+  distM:     0,
+  best:      Number(localStorage.getItem('overdrive.best') || 0),
+  nearMiss:  0,
+
+  // Spawn timers
+  nextCarAt:      1.6,
+  nextObstacleAt: 5.0,
+
+  // Cosmetic
+  shakeT:    0,
+  // Crash sequence — when collision fires we enter mode 'crashing'
+  // for CRASH_DUR seconds. During that window updates pause but the
+  // crash render (shake, flash, debris) plays out. Then the overlay
+  // appears so the player sees the wreck before the score modal.
+  crashT:    0,
+  flashT:    0,
+};
+
+const CRASH_DUR = 0.7;
+
+function laneCenter(i) {
+  return -ROAD_HALF + (i + 0.5) * LANE_WIDTH;
+}
+
+// Pinhole projection. zCap protects the very-near band from blowing
+// up (objects at z < Z_NEAR snap to max scale). Once past Z_NEAR
+// the sprite slides DOWN off the bottom edge so it visibly whooshes
+// past the camera instead of hanging at screen-bottom for a beat.
+function project(x, z) {
+  const zCap = Math.max(z, Z_NEAR);
+  const scale = F / zCap;
+  let sy = HORIZON_Y + CAM_H * scale;
+  if (z < Z_NEAR) sy += (Z_NEAR - z) * 3.5;     // slide past camera
+  return {
+    sx: W / 2 + x * scale,
+    sy,
+    scale,
+  };
+}
+
+// ---------- Reset ----------
+function resetState() {
+  state.mode       = 'playing';
+  state.elapsed    = 0;
+  state.distance   = 0;
+  state.speed      = BASE_SPEED;
+  state.px         = 0;
+  state.tilt       = 0;
+  state.steerLeft  = false;
+  state.steerRight = false;
+  state.brake      = false;
+  state.boostHeld  = false;
+  state.boostReserve = BOOST_MAX;
+  state.boosting   = false;
+  state.cars.length      = 0;
+  state.obstacles.length = 0;
+  state.particles.length = 0;
+  state.score      = 0;
+  state.distM      = 0;
+  state.nearMiss   = 0;
+  state.nextCarAt      = 1.6;
+  state.nextObstacleAt = 5.0;
+  state.shakeT     = 0;
+  state.crashT     = 0;
+  state.flashT     = 0;
+  seedStars();
+  updateHUD();
+}
+
+function seedStars() {
+  state.stars.length = 0;
+  for (let i = 0; i < 70; i++) {
+    state.stars.push({
+      x: Math.random() * W,
+      y: Math.random() * (HORIZON_Y - 6),
+      sz: Math.random() < 0.3 ? 2 : 1,
+    });
+  }
+}
+
+// ---------- Input ----------
+function startOrToggle() {
+  if (state.mode === 'menu')     { startGame(); return true; }
+  if (state.mode === 'gameover') { startGame(); return true; }
+  if (state.mode === 'paused')   { state.mode = 'playing'; hideOverlays(); return true; }
+  return false;
+}
+
+addEventListener('keydown', e => {
+  if (e.repeat) return;
+  const k = e.key;
+  const lk = k.toLowerCase();
+  if (k === 'ArrowLeft' || lk === 'a') {
+    state.steerLeft = true;
+    e.preventDefault();
+  } else if (k === 'ArrowRight' || lk === 'd') {
+    state.steerRight = true;
+    e.preventDefault();
+  } else if (k === ' ' || k === 'Spacebar') {
+    if (!startOrToggle()) state.boostHeld = true;
+    e.preventDefault();
+    sfx.init();
+  } else if (k === 'ArrowDown' || lk === 's') {
+    state.brake = true;
+    e.preventDefault();
+  } else if (lk === 'p' && state.mode !== 'menu') {
+    if (state.mode === 'playing')      { state.mode = 'paused';   showOverlay('pauseScreen'); musicStop(); }
+    else if (state.mode === 'paused')  { state.mode = 'playing';  hideOverlays();             musicStart(); }
+  } else if (lk === 'm') {
+    const muted = sfx.toggle();
+    document.getElementById('muteBtnMenu').textContent = muted ? '♪ SOUND OFF' : '♪ SOUND ON';
+  } else if (lk === 'r') {
+    if (state.mode !== 'menu') startGame();
+  }
+});
+
+addEventListener('keyup', e => {
+  const k = e.key;
+  const lk = k.toLowerCase();
+  if (k === 'ArrowLeft' || lk === 'a') state.steerLeft = false;
+  else if (k === 'ArrowRight' || lk === 'd') state.steerRight = false;
+  else if (k === ' ' || k === 'Spacebar') state.boostHeld = false;
+  else if (k === 'ArrowDown' || lk === 's') state.brake = false;
+});
+
+// Touch buttons
+function bindTouch(btn, set) {
+  if (!btn) return;
+  const down = (e) => { set(true);  e.preventDefault(); sfx.init(); };
+  const up   = ()   => { set(false); };
+  btn.addEventListener('touchstart', down, { passive:false });
+  btn.addEventListener('touchend',   up);
+  btn.addEventListener('touchcancel', up);
+  btn.addEventListener('mousedown',  down);
+  btn.addEventListener('mouseup',    up);
+  btn.addEventListener('mouseleave', up);
+}
+bindTouch(document.getElementById('tLeft'),  v => state.steerLeft  = v);
+bindTouch(document.getElementById('tRight'), v => state.steerRight = v);
+bindTouch(document.getElementById('tBoost'), v => state.boostHeld  = v);
+
+// Buttons
+document.getElementById('startBtn').addEventListener('click', startGame);
+document.getElementById('retryBtn').addEventListener('click', startGame);
+document.getElementById('resumeBtn').addEventListener('click', () => {
+  state.mode = 'playing'; hideOverlays(); musicStart();
+});
+document.getElementById('restartBtnPause').addEventListener('click', startGame);
+document.getElementById('muteBtnMenu').addEventListener('click', () => {
+  const muted = sfx.toggle();
+  document.getElementById('muteBtnMenu').textContent = muted ? '♪ SOUND OFF' : '♪ SOUND ON';
+});
+
+// ---------- Lifecycle ----------
+function startGame() {
+  resetState();
+  hideOverlays();
+  last = performance.now();
+  sfx.init();
+  musicStart();
+}
+
+// Two-phase end-of-run:
+//   triggerCrash()   — fires INSTANTLY on collision. Cuts the music,
+//                      kicks shake/flash/debris, plays the crash hit,
+//                      and switches to mode 'crashing'. update() is
+//                      a no-op while crashing, so the player can't
+//                      move and nothing else spawns — but particles
+//                      and shake decay in the render path.
+//   finalizeGameOver() — fires CRASH_DUR seconds later. Computes the
+//                      final score, surfaces the score-status DOM,
+//                      submits, and shows the gameover overlay.
+function triggerCrash() {
+  if (state.mode === 'crashing' || state.mode === 'gameover') return;
+  state.mode   = 'crashing';
+  state.crashT = 0;
+  state.shakeT = 0.9;          // bigger than the old 0.55
+  state.flashT = 0.35;         // brief red overlay flash
+  // Big debris burst at the player's screen position so the impact
+  // reads at the cube, not at some abstract origin.
+  const sx = W / 2 + state.px * (F / Z_NEAR);
+  const sy = H - 50;
+  spawnCrashBurst(sx, sy);
+  crashSfx();
+  stopMusic();
+}
+
+function spawnCrashBurst(sx, sy) {
+  const palette = [
+    '--player-body', '--player-glow', '--lane-line',
+    '--barrier', '--firewall',
+  ];
+  for (let i = 0; i < 28; i++) {
+    const ang = Math.random() * Math.PI * 2;
+    const sp  = rand(140, 380);
+    state.particles.push({
+      x: sx + rand(-12, 12),
+      y: sy + rand(-10, 10),
+      vx: Math.cos(ang) * sp,
+      vy: Math.sin(ang) * sp - rand(40, 160),  // pop upward
+      life: 0.7 + Math.random() * 0.4,
+      max:  1.1,
+      glyph: Math.random() < 0.5 ? '0' : '1',
+      color: palette[(Math.random() * palette.length) | 0],
+    });
+  }
+}
+
+function finalizeGameOver() {
+  state.mode = 'gameover';
+  const finalScore = Math.floor(state.score);
+  const isBest = finalScore > state.best;
+  if (isBest) {
+    state.best = finalScore;
+    localStorage.setItem('overdrive.best', String(finalScore));
+  }
+  document.getElementById('finalScore').textContent = pad(finalScore, 6);
+  document.getElementById('finalBest').textContent  = pad(state.best, 6);
+  document.getElementById('finalDist').textContent  = pad(state.distM, 4) + 'm';
+  document.getElementById('newBestMsg').style.display = isBest ? 'block' : 'none';
+  if (window.NostalgiaScores) {
+    window.NostalgiaScores.submitAndReport(
+      'overdrive', finalScore, document.getElementById('scoreStatus')
+    );
+  }
+  showOverlay('gameoverScreen');
+}
+
+// ---------- Spawning ----------
+function pickTrafficColor() {
+  const cs = ['--traffic-1', '--traffic-2', '--traffic-3', '--traffic-4'];
+  return cs[randInt(0, cs.length - 1)];
+}
+
+function spawnCar() {
+  const lane = randInt(0, LANES - 1);
+  // Avoid stacking too closely behind another car already in this lane.
+  for (const c of state.cars) {
+    if (c.lane === lane && c.z > Z_SPAWN - 200) return;
+  }
+  state.cars.push({
+    kind:'car',
+    lane,
+    x: laneCenter(lane),
+    z: Z_SPAWN + rand(-50, 80),
+    vSpeed: rand(state.speed * 0.45, state.speed * 0.85),
+    w: 26, lenZ: 22,
+    color: pickTrafficColor(),
+    passed: false,
+  });
+}
+
+function spawnObstacle() {
+  const t = state.elapsed;
+  const kinds = ['barrier'];
+  if (t >= 14) kinds.push('firewall');
+  if (t >= 24) kinds.push('glitch');
+  const kind = kinds[randInt(0, kinds.length - 1)];
+  const lane = randInt(0, LANES - 1);
+  state.obstacles.push({
+    kind,
+    lane,
+    x: laneCenter(lane),
+    z: Z_SPAWN + rand(-30, 80),
+    w: 36, lenZ: 18,
+  });
+}
+
+function spawnNearMissBurst(sx) {
+  for (let i = 0; i < 6; i++) {
+    state.particles.push({
+      x: sx + rand(-20, 20),
+      y: H - 50 + rand(-10, 10),
+      vx: rand(-180, 180),
+      vy: rand(-220, -50),
+      life: 0.45, max: 0.45,
+      glyph: Math.random() < 0.5 ? '0' : '1',
+      color: '--player-glow',
+    });
+  }
+}
+
+function spawnExhaust() {
+  if (Math.random() > (state.boosting ? 0.85 : 0.4)) return;
+  const sxScale = F / Z_NEAR;
+  const px = W / 2 + state.px * sxScale;
+  state.particles.push({
+    x: px + rand(-10, 10),
+    y: H - 28 + rand(-2, 4),
+    vx: rand(-30, 30),
+    vy: rand(80, 160),
+    life: 0.5, max: 0.5,
+    glyph: Math.random() < 0.5 ? '0' : '1',
+    color: state.boosting ? '--boost-trail' : '--player-under',
+  });
+}
+
+// ---------- Update ----------
+function update(dt) {
+  // Crash sequence — let particles drift and shake decay; advance
+  // the crash timer until we hand off to the gameover overlay.
+  if (state.mode === 'crashing') {
+    state.crashT += dt;
+    if (state.shakeT > 0) state.shakeT = Math.max(0, state.shakeT - dt);
+    if (state.flashT > 0) state.flashT = Math.max(0, state.flashT - dt);
+    for (let i = state.particles.length - 1; i >= 0; i--) {
+      const p = state.particles[i];
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vy += 600 * dt;
+      p.life -= dt;
+      if (p.life <= 0) state.particles.splice(i, 1);
+    }
+    if (state.crashT >= CRASH_DUR) finalizeGameOver();
+    return;
+  }
+  if (state.mode !== 'playing') return;
+  state.elapsed += dt;
+
+  // Speed ramps with elapsed; brake/boost mods stack on top.
+  const baseSpeed = Math.min(SPEED_CAP, BASE_SPEED + state.elapsed * SPEED_PER_S);
+
+  // Boost reserve
+  state.boosting = state.boostHeld && state.boostReserve > 0;
+  if (state.boosting) {
+    state.boostReserve = Math.max(0, state.boostReserve - dt * BOOST_DRAIN);
+  } else if (!state.boostHeld) {
+    state.boostReserve = Math.min(BOOST_MAX, state.boostReserve + dt * BOOST_REGEN);
+  }
+
+  let speed = baseSpeed;
+  if (state.boosting) speed *= BOOST_MUL;
+  if (state.brake)    speed *= BRAKE_MUL;
+  state.speed = speed;
+  state.distance += speed * dt;
+  state.distM = Math.floor(state.distance / METER_PX);
+
+  // Steering — gently dampened at high speed so a held-down arrow
+  // doesn't ping-pong you across all four lanes.
+  let steerDir = 0;
+  if (state.steerLeft)  steerDir -= 1;
+  if (state.steerRight) steerDir += 1;
+  const speedFactor = 0.7 + 0.3 * (BASE_SPEED / Math.max(BASE_SPEED, speed));
+  state.px += steerDir * STEER_SPEED * speedFactor * dt;
+  state.px = clamp(state.px,
+    -ROAD_HALF + PLAYER_W / 2,
+     ROAD_HALF - PLAYER_W / 2);
+  state.tilt += (steerDir - state.tilt) * Math.min(1, dt * 8);
+
+  // Move traffic toward camera using relative speed (player is faster
+  // than most traffic so they appear stationary or drifting back).
+  // Cull at z < -10 — just past the collision window — so passed
+  // sprites don't linger at the bottom of the screen.
+  for (let i = state.cars.length - 1; i >= 0; i--) {
+    const c = state.cars[i];
+    c.z -= (speed - c.vSpeed) * dt;
+    if (c.z < -10) state.cars.splice(i, 1);
+  }
+  for (let i = state.obstacles.length - 1; i >= 0; i--) {
+    const o = state.obstacles[i];
+    o.z -= speed * dt;
+    if (o.z < -10) state.obstacles.splice(i, 1);
+  }
+
+  // Spawn cadence — interval shrinks with elapsed time.
+  state.nextCarAt -= dt;
+  if (state.nextCarAt <= 0) {
+    spawnCar();
+    const interval = clamp(2.0 - state.elapsed * 0.018, 0.55, 2.0);
+    state.nextCarAt = interval + rand(-0.2, 0.4);
+  }
+  state.nextObstacleAt -= dt;
+  if (state.nextObstacleAt <= 0) {
+    spawnObstacle();
+    const interval = clamp(7.0 - state.elapsed * 0.04, 2.5, 7.0);
+    state.nextObstacleAt = interval + rand(-0.5, 1.5);
+  }
+
+  // Collisions — a small hitbox shrink (4px on each side of x,
+  // 2px on z) so brushing past doesn't always kill.
+  const pxShrink = 4, zShrink = 2;
+  for (const c of state.cars) {
+    if (Math.abs(c.z) < (PLAYER_LEN_Z + c.lenZ) / 2 - zShrink &&
+        Math.abs(c.x - state.px) < (PLAYER_W + c.w) / 2 - pxShrink) {
+      return triggerCrash();
+    }
+    if (!c.passed && c.z < 12) {
+      c.passed = true;
+      const dx = Math.abs(c.x - state.px);
+      // "Near miss" = closer than ~one lane, but not a hit.
+      if (dx < LANE_WIDTH * 0.7 && dx > (PLAYER_W + c.w) / 2 - pxShrink + 2) {
+        state.score += SCORE_NEAR_MISS;
+        state.nearMiss++;
+        spawnNearMissBurst(W / 2 + state.px * (F / Z_NEAR));
+        nearMissSfx();
+      }
+    }
+  }
+  for (const o of state.obstacles) {
+    if (Math.abs(o.z) < (PLAYER_LEN_Z + o.lenZ) / 2 - zShrink &&
+        Math.abs(o.x - state.px) < (PLAYER_W + o.w) / 2 - pxShrink) {
+      return triggerCrash();
+    }
+  }
+
+  // Particles
+  for (let i = state.particles.length - 1; i >= 0; i--) {
+    const p = state.particles[i];
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.vy += 600 * dt;
+    p.life -= dt;
+    if (p.life <= 0) state.particles.splice(i, 1);
+  }
+
+  // Audio garnishes
+  if (Math.random() < 0.25) engineSfx();
+
+  // Continuous exhaust
+  spawnExhaust();
+
+  // Score: 1 point per meter traveled this tick, plus near-miss bursts
+  state.score += (speed * dt) / METER_PX;
+
+  // Shake decay
+  if (state.shakeT > 0) state.shakeT = Math.max(0, state.shakeT - dt);
+
+  updateHUD();
+}
+
+function updateHUD() {
+  hudScore.textContent = pad(Math.floor(state.score), 6);
+  hudDist.textContent  = pad(state.distM, 4) + 'm';
+  hudBest.textContent  = pad(state.best, 6);
+  hudSpeed.textContent = (state.speed / BASE_SPEED).toFixed(1) + 'x';
+  hudBoost.textContent = state.boostReserve.toFixed(1) + 's';
+  hudNear.textContent  = String(state.nearMiss);
+}
+
+// ---------- Render ----------
+function render() {
+  let shx = 0, shy = 0;
+  if (state.shakeT > 0) {
+    shx = (Math.random() - 0.5) * 6;
+    shy = (Math.random() - 0.5) * 4;
+  }
+  ctx.save();
+  ctx.translate(shx, shy);
+
+  drawSky();
+  drawGround();
+  drawRoad();
+  drawSprites();
+  drawPlayer();
+  drawParticles();
+  drawCrashFlash();
+  drawScanlines();
+
+  ctx.restore();
+}
+
+function drawCrashFlash() {
+  if (state.flashT <= 0) return;
+  // Two-layer flash: a quick red wash that fades, plus a hot-pink
+  // border ring so the crash hits like a controller buzz.
+  const t = state.flashT / 0.35;     // 0..1
+  ctx.globalAlpha = t * 0.55;
+  ctx.fillStyle = color('--firewall');
+  ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = Math.min(1, t * 0.9);
+  ctx.strokeStyle = color('--player-body');
+  ctx.lineWidth = 6;
+  ctx.strokeRect(3, 3, W - 6, H - 6);
+  ctx.globalAlpha = 1;
+}
+
+function drawSky() {
+  // Vertical gradient: deep space → mid → horizon glow.
+  const grad = ctx.createLinearGradient(0, 0, 0, HORIZON_Y);
+  grad.addColorStop(0,    color('--sky-top'));
+  grad.addColorStop(0.65, color('--sky-mid'));
+  grad.addColorStop(1,    color('--horizon-1'));
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, HORIZON_Y);
+
+  // Stars
+  ctx.fillStyle = color('--star');
+  for (const s of state.stars) {
+    ctx.globalAlpha = s.sz === 2 ? 0.85 : 0.5;
+    ctx.fillRect(s.x | 0, s.y | 0, s.sz, s.sz);
+  }
+  ctx.globalAlpha = 1;
+
+  // Synthwave sun — a half-disc straddling the horizon with
+  // horizontal "scan" stripes punched through it.
+  const sunR = 46;
+  const sunGrad = ctx.createLinearGradient(0, HORIZON_Y - sunR, 0, HORIZON_Y);
+  sunGrad.addColorStop(0,   color('--horizon-2'));
+  sunGrad.addColorStop(1,   color('--horizon-1'));
+  ctx.fillStyle = sunGrad;
+  ctx.beginPath();
+  ctx.arc(W / 2, HORIZON_Y, sunR, Math.PI, 2 * Math.PI);
+  ctx.fill();
+  // Stripes
+  ctx.fillStyle = color('--sky-mid');
+  for (let y = HORIZON_Y - sunR + 8; y < HORIZON_Y - 4; y += 8) {
+    const ratio = (HORIZON_Y - y) / sunR;
+    const halfW = Math.sqrt(Math.max(0, 1 - ratio * ratio)) * sunR;
+    ctx.fillRect(W / 2 - halfW, y, halfW * 2, 2);
+  }
+}
+
+function drawGround() {
+  // Solid ground wash beneath the road
+  ctx.fillStyle = color('--bg-deep');
+  ctx.fillRect(0, HORIZON_Y, W, H - HORIZON_Y);
+
+  // Off-road perspective grid — vertical lines converge to the
+  // horizon's center, horizontal lines step in z toward camera so
+  // the world looks like it's flowing under us.
+  const cx = W / 2;
+  ctx.strokeStyle = color('--grid-line');
+  ctx.lineWidth = 1;
+  ctx.globalAlpha = 0.45;
+  ctx.beginPath();
+  // Verticals — rays from horizon outward, skipping the road area
+  for (let i = -8; i <= 8; i++) {
+    const xWorld = i * 90;
+    if (Math.abs(xWorld) < ROAD_HALF + 30) continue;
+    const top = project(xWorld, Z_FAR);
+    const bot = project(xWorld, Z_NEAR);
+    ctx.moveTo(top.sx | 0, HORIZON_Y);
+    ctx.lineTo(bot.sx | 0, H);
+  }
+  ctx.stroke();
+  // Horizontals — z bands flowing forward
+  ctx.beginPath();
+  const phase = state.distance % (STRIPE_LEN * 2);
+  for (let z = STRIPE_LEN; z < Z_FAR; z += STRIPE_LEN * 2) {
+    const localZ = z + phase;
+    const y = HORIZON_Y + (CAM_H * F) / Math.max(Z_NEAR, localZ);
+    if (y >= H || y < HORIZON_Y) continue;
+    ctx.moveTo(0, y | 0);
+    ctx.lineTo(W, y | 0);
+  }
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
+function drawRoad() {
+  // Per-row road raster. For each screen-y from horizon down to
+  // bottom, compute world-z, then draw the road slab + lane lines
+  // + rumble strips at that depth.
+  const cx = W / 2;
+  for (let y = HORIZON_Y + 1; y < H; y++) {
+    const dy = y - HORIZON_Y;
+    if (dy <= 0) continue;
+    const z      = (CAM_H * F) / dy;
+    const totalZ = z + state.distance;
+    const halfW  = ROAD_HALF * F / z;
+
+    const stripeIdx = Math.floor(totalZ / STRIPE_LEN);
+    const isAlt = (stripeIdx & 1) === 0;
+
+    // Tarmac
+    ctx.fillStyle = isAlt ? color('--road-a') : color('--road-b');
+    ctx.fillRect((cx - halfW) | 0, y, (halfW * 2) | 0, 1);
+
+    // Lane dividers — dashed, only on alt stripes
+    if (isAlt) {
+      ctx.fillStyle = color('--lane-line');
+      for (let i = 1; i < LANES; i++) {
+        const lx = -ROAD_HALF + i * LANE_WIDTH;
+        const sx = cx + lx * F / z;
+        ctx.fillRect((sx - 1) | 0, y, 2, 1);
+      }
+    }
+
+    // Outer rumble strips alternate pink/cyan
+    const rumbleW = Math.max(2, 6 * F / z);
+    ctx.fillStyle = isAlt ? color('--rumble-a') : color('--rumble-b');
+    ctx.fillRect((cx - halfW - rumbleW) | 0, y, rumbleW | 0, 1);
+    ctx.fillRect((cx + halfW) | 0, y, rumbleW | 0, 1);
+  }
+}
+
+function drawSprites() {
+  // Combine traffic + obstacles, sort back-to-front so closer ones
+  // overdraw farther ones (correct occlusion).
+  const list = state.cars.concat(state.obstacles);
+  list.sort((a, b) => b.z - a.z);
+  for (const s of list) {
+    // Skip far-away (out of frustum) and anything that has slid
+    // far enough past the camera to be off-screen below the canvas.
+    if (s.z > Z_FAR || s.z < -10) continue;
+    if (s.kind === 'car') drawCar(s);
+    else                  drawObstacle(s);
+  }
+}
+
+function drawCar(c) {
+  const { sx, sy, scale } = project(c.x, c.z);
+  const w = Math.max(2, c.w * scale);
+  const h = Math.max(2, 18 * scale);
+  // Body
+  ctx.fillStyle = color(c.color);
+  ctx.fillRect(sx - w / 2, sy - h, w, h);
+  // Inset darker panel
+  ctx.fillStyle = 'rgba(0,0,0,0.42)';
+  ctx.fillRect(sx - w / 2 + 2, sy - h + 2, Math.max(0, w - 4), Math.max(0, h - 4));
+  // Underglow
+  ctx.fillStyle = color(c.color);
+  ctx.globalAlpha = 0.55;
+  ctx.fillRect(sx - w / 2 - 2, sy - 1, w + 4, 2);
+  ctx.globalAlpha = 1;
+  // Tail lights — only readable when sprite is large enough
+  if (w > 10) {
+    ctx.fillStyle = color('--rumble-a');
+    ctx.fillRect(sx - w / 2 + 2, sy - h + 4, 3, 3);
+    ctx.fillRect(sx + w / 2 - 5, sy - h + 4, 3, 3);
+  }
+}
+
+function drawObstacle(o) {
+  const { sx, sy, scale } = project(o.x, o.z);
+  const w = Math.max(2, o.w * scale);
+  const h = Math.max(4, 26 * scale);
+  if (o.kind === 'barrier') {
+    // Striped pink/yellow road barrier
+    const slices = 4;
+    for (let i = 0; i < slices; i++) {
+      ctx.fillStyle = i % 2 === 0 ? color('--barrier') : color('--lane-line');
+      ctx.fillRect(sx - w / 2 + i * (w / slices), sy - h, w / slices, h);
+    }
+    // Top cap
+    ctx.fillStyle = '#000';
+    ctx.globalAlpha = 0.4;
+    ctx.fillRect(sx - w / 2, sy - h, w, 2);
+    ctx.globalAlpha = 1;
+  } else if (o.kind === 'firewall') {
+    ctx.fillStyle = color('--firewall');
+    ctx.fillRect(sx - w / 2, sy - h, w, h);
+    // Flame ticks
+    ctx.fillStyle = color('--lane-line');
+    const ticks = Math.max(2, Math.floor(w / 6));
+    for (let i = 0; i < ticks; i++) {
+      const tx = sx - w / 2 + Math.random() * w;
+      const ty = sy - h * (Math.random() * 0.85 + 0.05);
+      ctx.fillRect(tx, ty, 2, 4);
+    }
+  } else if (o.kind === 'glitch') {
+    // Sliced purple — each slice slightly offset for that VHS-glitch read
+    const slices = 4;
+    const sliceH = h / slices;
+    for (let i = 0; i < slices; i++) {
+      const ofs = (Math.random() - 0.5) * Math.max(2, 6 * scale);
+      ctx.fillStyle = color('--glitch');
+      ctx.fillRect(sx - w / 2 + ofs, sy - h + i * sliceH, w, sliceH);
+    }
+    // Bright top edge
+    ctx.fillStyle = color('--player-glow');
+    ctx.globalAlpha = 0.8;
+    ctx.fillRect(sx - w / 2, sy - h, w, 2);
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawPlayer() {
+  // Player draws at fixed near-camera scale rather than via z=0
+  // (which would explode the projection). Lateral position uses the
+  // same x scale as Z_NEAR so it lines up with the on-road sprites.
+  const scale = F / Z_NEAR;
+  const sx = W / 2 + state.px * scale;
+  const sy = H - 50;
+  const carW = 56, carH = 32;
+  const tilt = state.tilt;
+
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.rotate(tilt * 0.06);
+  ctx.translate(-sx, -sy);
+
+  // Underglow halo
+  ctx.fillStyle = color('--player-under');
+  ctx.globalAlpha = 0.55;
+  ctx.fillRect(sx - carW / 2 - 4, sy + carH / 2 - 4, carW + 8, 8);
+  ctx.globalAlpha = 1;
+
+  // Body
+  ctx.fillStyle = color('--player-body');
+  ctx.fillRect(sx - carW / 2, sy - carH / 2, carW, carH);
+  // Inner inset (cabin shadow)
+  ctx.fillStyle = color('--player-dark');
+  ctx.fillRect(sx - carW / 2 + 4, sy - carH / 2 + 6, carW - 8, carH - 16);
+  // Cockpit glow strip
+  ctx.fillStyle = color('--player-glow');
+  ctx.fillRect(sx - 12, sy - carH / 2 + 10, 24, 6);
+  // Headlights
+  ctx.fillStyle = color('--lane-line');
+  ctx.fillRect(sx - carW / 2 + 4,  sy + carH / 2 - 7, 6, 3);
+  ctx.fillRect(sx + carW / 2 - 10, sy + carH / 2 - 7, 6, 3);
+  // Side fins
+  ctx.fillStyle = color('--player-body');
+  ctx.fillRect(sx - carW / 2 - 4, sy - 4, 4, 8);
+  ctx.fillRect(sx + carW / 2,     sy - 4, 4, 8);
+
+  ctx.restore();
+
+  // Boost flame (drawn unrotated for stable reads)
+  if (state.boosting) {
+    ctx.fillStyle = color('--boost-trail');
+    ctx.fillRect(sx - carW / 3, sy + carH / 2, (carW * 2) / 3, 6);
+    ctx.globalAlpha = 0.55;
+    ctx.fillRect(sx - carW / 4, sy + carH / 2 + 6, carW / 2, 4);
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawParticles() {
+  ctx.font = "9px 'JetBrains Mono', monospace";
+  ctx.textBaseline = 'top';
+  for (const p of state.particles) {
+    ctx.globalAlpha = Math.max(0, p.life / p.max);
+    ctx.fillStyle = color(p.color);
+    ctx.fillText(p.glyph, p.x, p.y);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawScanlines() {
+  ctx.globalAlpha = 0.06;
+  ctx.fillStyle = '#ffffff';
+  for (let y = 0; y < H; y += 3) ctx.fillRect(0, y, W, 1);
+  ctx.globalAlpha = 1;
+}
+
+// ---------- Main loop ----------
+let last = performance.now();
+const MAX_DT = 1 / 30;
+function frame(now) {
+  let dt = (now - last) / 1000;
+  last = now;
+  if (dt > MAX_DT) dt = MAX_DT;
+  update(dt);
+  render();
+  musicTick();             // schedule the next slice of synth notes
+  requestAnimationFrame(frame);
+}
+
+resetState();
+state.mode = 'menu';
+seedStars();
+showOverlay('startScreen');
+updateHUD();
+requestAnimationFrame(frame);
+
+})();
+</script>
+</body>
+</html>

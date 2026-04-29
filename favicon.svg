@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" shape-rendering="crispEdges">
+  <!-- NOSTALGIA.EXE pixel mark: stylized "N" in neon cyan on deep-navy,
+       with a magenta drop-shadow offset one pixel down/right for a
+       VHS/glitch feel. shape-rendering="crispEdges" keeps pixels sharp
+       at any size. -->
+  <rect width="16" height="16" fill="#0a0a10"/>
+  <!-- Magenta drop-shadow layer (offset +1,+1) -->
+  <g fill="#ff4fa1" opacity="0.9">
+    <rect x="4" y="3" width="2" height="11"/>
+    <rect x="12" y="3" width="2" height="11"/>
+    <rect x="6" y="5" width="2" height="2"/>
+    <rect x="7" y="7" width="2" height="2"/>
+    <rect x="8" y="9" width="2" height="2"/>
+    <rect x="9" y="11" width="2" height="2"/>
+  </g>
+  <!-- Cyan foreground -->
+  <g fill="#00e5ff">
+    <rect x="3" y="2" width="2" height="11"/>
+    <rect x="11" y="2" width="2" height="11"/>
+    <rect x="5" y="4" width="2" height="2"/>
+    <rect x="6" y="6" width="2" height="2"/>
+    <rect x="7" y="8" width="2" height="2"/>
+    <rect x="8" y="10" width="2" height="2"/>
+  </g>
+  <!-- Corner pixel accent -->
+  <rect x="14" y="14" width="1" height="1" fill="#b388ff"/>
+  <rect x="1" y="1" width="1" height="1" fill="#7df98a"/>
+</svg>

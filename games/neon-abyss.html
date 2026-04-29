@@ -1,0 +1,1971 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>NEON ABYSS — Nostalgia.exe</title>
+<link rel="icon" type="image/svg+xml" href="../favicon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=Press+Start+2P&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="shared/arcade.css" />
+<style>
+  /* Game-specific palette + UI for Neon Abyss (extends shared arcade.css) */
+  :root {
+    --brick-1:     #00e5ff;
+    --brick-2:     #b388ff;
+    --brick-3:     #ff4fa1;
+    --brick-4:     #ffd866;
+    --unbreakable: #5a5a72;
+    --ball:        #ffffff;
+    /* Volleyer enemy color (L26+) — bright toxic green, distinct from
+       any existing palette slot so the 3-bullet threat reads fast. */
+    --accent-grn:  #4ee077;
+  }
+  [data-theme="light"] {
+    --brick-1:     #4ab8c8;
+    --brick-2:     #ff7aa8;
+    --brick-3:     #ff9f6b;
+    --brick-4:     #f5d06f;
+    --unbreakable: #8a8088;
+    --ball:        #fffaee;
+    --accent-grn:  #3fb25f;
+  }
+
+  .score-guide {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px 18px;
+    margin: 18px 0 22px;
+    text-align: left;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+  }
+  .score-guide div { display: flex; align-items: center; gap: 10px; }
+  .score-guide i {
+    width: 22px; height: 16px; border: 1px solid var(--text);
+    display: grid; place-items: center;
+    font-style: normal;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 8px;
+    color: var(--bg);
+  }
+
+  /* Upgrade perk grid — always shows all 5 perks, so 5 columns */
+  .perk-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+    margin: 22px 0 18px;
+  }
+  .perk-card {
+    border: 2px solid var(--text);
+    background: var(--bg);
+    padding: 12px 8px;
+    text-align: center;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+    box-shadow: 4px 4px 0 var(--text);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+  }
+  .perk-card:hover {
+    transform: translate(-2px,-2px);
+    box-shadow: 6px 6px 0 var(--accent-2);
+  }
+  .perk-card.disabled {
+    cursor: not-allowed;
+    opacity: 0.38;
+    box-shadow: 2px 2px 0 var(--text);
+  }
+  .perk-card.disabled:hover {
+    transform: none;
+    box-shadow: 2px 2px 0 var(--text);
+  }
+  .perk-status {
+    position: absolute;
+    top: 4px;
+    right: 6px;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 7px;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+  }
+  .perk-status.maxed { color: var(--accent-2); }
+  .perk-status.locked { color: var(--accent-hot); }
+  .perk-key {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+  }
+  .perk-icon { font-size: 24px; margin: 2px 0 6px; line-height: 1; }
+  .perk-name {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 8px;
+    margin-bottom: 6px;
+    line-height: 1.4;
+    min-height: 22px;
+    display: flex;
+    align-items: center;
+  }
+  .perk-lv {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+  }
+  .perk-desc {
+    font-size: 10px;
+    color: var(--text-dim);
+    min-height: 44px;
+    line-height: 1.4;
+    margin-bottom: 8px;
+  }
+  .perk-pips { display: flex; gap: 2px; justify-content: center; margin-top: auto; }
+  .perk-pip { width: 10px; height: 4px; background: var(--border); }
+  .perk-pip.on { background: var(--accent-2); }
+
+  @media (max-width: 980px) {
+    .perk-grid { grid-template-columns: repeat(3, 1fr); }
+  }
+  @media (max-width: 780px) {
+    .perk-grid   { grid-template-columns: repeat(2, 1fr); }
+    .score-guide { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="bg-grid"></div>
+<div class="scanlines"></div>
+
+<header class="topbar">
+  <a href="../index.html" class="back">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    EXIT
+  </a>
+  <div class="title-tag">NEON ABYSS<span class="ver">v1.0.0 // 1994.EXE</span></div>
+  <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme"></button>
+</header>
+
+<section class="hud" id="hud">
+  <div class="hud-col">
+    <div class="hud-stat score">SCORE<strong id="hudScore">000000</strong></div>
+    <div class="hud-stat">LEVEL<strong id="hudLevel">01</strong></div>
+  </div>
+  <div class="powerup-stack" id="perkStack"></div>
+  <div class="hud-col">
+    <div class="hud-stat best">BEST<strong id="hudBest">000000</strong></div>
+    <div class="hud-stat lives">LIVES<strong id="hudLives">♥♥♥</strong></div>
+  </div>
+</section>
+
+<div class="stage">
+  <canvas id="game" width="900" height="620"></canvas>
+</div>
+
+<footer class="bottombar">
+  <div class="keys">
+    <span><kbd>←</kbd><kbd>→</kbd> MOVE</span>
+    <span><kbd>SPACE</kbd> SHOOT</span>
+    <span><kbd>Z</kbd> LASER</span>
+    <span><kbd>M</kbd> MUTE</span>
+    <span><kbd>P</kbd> PAUSE</span>
+  </div>
+  <div>© NOSTALGIA.EXE — <span class="blink">█</span></div>
+</footer>
+
+<div class="touch" id="touch">
+  <button id="tLeft" aria-label="Left">◀</button>
+  <div class="right-cluster">
+    <button id="tLaser" aria-label="Laser">⚡</button>
+    <button id="tFire" aria-label="Fire">●</button>
+    <button id="tRight" aria-label="Right">▶</button>
+  </div>
+</div>
+
+<!-- Start menu -->
+<div class="overlay" id="startScreen">
+  <div class="card">
+    <div class="card-head">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span>neon_abyss.app</span>
+      <span>_ □ ×</span>
+    </div>
+    <h1>NEON ABYSS</h1>
+    <p>Arcade shooter from 1994's imagined future. Clear each wave, pick an upgrade, push deeper into the grid.</p>
+
+    <div class="score-guide">
+      <div><i style="background:var(--brick-3)">★</i><span>Small drone — 40 pts</span></div>
+      <div><i style="background:var(--brick-1)">◈</i><span>Crawler — 20 pts</span></div>
+      <div><i style="background:var(--brick-2)">●</i><span>Hulk — 10 pts</span></div>
+      <div><i style="background:var(--brick-4)">▲</i><span>Tank (3 HP) — 100 pts</span></div>
+      <div style="grid-column:1/-1"><i style="background:var(--accent-hot)">◆</i><span>Mystery UFO — 50–300 pts</span></div>
+    </div>
+
+    <button class="btn" id="startBtn">▶ START GAME</button>
+    <button class="btn ghost" id="muteBtnMenu">♪ SOUND ON</button>
+  </div>
+</div>
+
+<!-- Pause -->
+<div class="overlay hidden" id="pauseScreen">
+  <div class="card">
+    <div class="card-head">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span>pause.sys</span>
+      <span>_ □ ×</span>
+    </div>
+    <h2>PAUSED</h2>
+    <p>Signal buffered.</p>
+    <button class="btn" id="resumeBtn">▶ RESUME</button>
+    <button class="btn ghost" id="restartBtnPause">↻ RESTART</button>
+  </div>
+</div>
+
+<!-- Game over -->
+<div class="overlay hidden" id="gameoverScreen">
+  <div class="card">
+    <div class="card-head">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span>gameover.log</span>
+      <span>_ □ ×</span>
+    </div>
+    <h2 style="color:var(--accent-hot)">GAME OVER</h2>
+    <p>Hull breached. The abyss reclaims another scout.</p>
+    <div class="stat-row">
+      <div>FINAL SCORE<strong id="finalScore">000000</strong></div>
+      <div>LEVEL<strong id="finalLevel">01</strong></div>
+    </div>
+    <p id="newBestMsg" style="color:var(--accent-2);margin:4px 0 16px;display:none">✦ NEW BEST ✦</p>
+    <p id="scoreStatus" class="score-status" data-state="idle"></p>
+    <button class="btn" id="retryBtn">↻ RETRY</button>
+    <a href="../index.html" class="btn ghost">◀ EXIT</a>
+  </div>
+</div>
+
+<!-- Upgrade -->
+<div class="overlay hidden" id="upgradeScreen">
+  <div class="card wide">
+    <div class="card-head">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span>wave_clear.exe</span>
+      <span>_ □ ×</span>
+    </div>
+    <h2 style="color:var(--accent-2)">WAVE CLEAR</h2>
+    <p>Choose an upgrade to deploy before the next wave.</p>
+    <div class="perk-grid" id="perkGrid"></div>
+    <p style="font-size:10px;letter-spacing:1px">press <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd> <kbd>5</kbd> &nbsp;or&nbsp; click a card</p>
+  </div>
+</div>
+
+<!-- Public scoreboard plumbing -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.105.1"></script>
+<script src="../shared/supabase-config.js"></script>
+<script src="../shared/auth.js"></script>
+<script src="../shared/scores.js"></script>
+
+<script src="shared/arcade.js"></script>
+<script>
+/* =============================================================
+   NEON ABYSS — Retro-Futuristic Arcade Shooter
+   ============================================================= */
+
+(() => {
+const cvs = document.getElementById('game');
+const ctx = cvs.getContext('2d');
+const W = cvs.width, H = cvs.height;
+
+// ---------- Utilities + palette (from shared module) ----------
+const { clamp, rand, randInt, pad, color, createAudio, createOverlayManager,
+        createSpriteCache, wireThemeToggle, fitCanvas } = Arcade;
+// Back-compat alias so the existing call sites keep working.
+const css = color;
+
+// ---------- Theme ----------
+wireThemeToggle('themeToggle');
+
+// ---------- Audio ----------
+const audio = createAudio('na.muted');
+const initAudio = audio.init;
+const beep  = audio.beep;
+const noise = audio.noise;
+const sfx = {
+  shoot:   () => beep(620, 0.07, 'square', 0.12, 280),
+  edie:    () => { beep(260, 0.09, 'sawtooth', 0.14, 70); noise(0.1, 0.1); },
+  pdie:    () => { beep(180, 0.55, 'sawtooth', 0.3, 50); noise(0.4, 0.22); },
+  bhit:    () => beep(130, 0.045, 'square', 0.1, 90),
+  laser:   () => { beep(1300, 0.04, 'sawtooth', 0.3, 90); beep(700, 0.35, 'sine', 0.2, 180); },
+  lvlup:   () => [523,659,784,1047].forEach((f,i) => setTimeout(() => beep(f,0.14,'square',0.16), i*110)),
+  upgrade: () => [440,550,660,880].forEach((f,i) => setTimeout(() => beep(f,0.11,'sine',0.14), i*75)),
+  ufoLoop: (t) => beep(180 + Math.sin(t)*70, 0.04, 'sawtooth', 0.08),
+  shield:  () => beep(900, 0.18, 'sine', 0.22, 1800),
+  eshoot:  () => beep(360, 0.055, 'sawtooth', 0.07, 180),
+  bonus:   () => { beep(880, 0.1, 'sine', 0.22, 1760); beep(1760, 0.2, 'sine', 0.16); },
+};
+const muteBtn = document.getElementById('muteBtnMenu');
+function updateMuteLabel() { muteBtn.textContent = audio.muted ? '♪ SOUND OFF' : '♪ SOUND ON'; }
+updateMuteLabel();
+muteBtn.addEventListener('click', () => { audio.toggle(); updateMuteLabel(); });
+
+// ---------- Pixel sprites (8x8) ----------
+const SP = {
+  sqA:[[0,0,1,0,0,0,1,0],[0,0,0,1,1,0,0,0],[0,1,1,1,1,1,1,0],[1,1,0,1,1,0,1,1],[1,1,1,1,1,1,1,1],[0,1,0,1,1,0,1,0],[1,0,0,0,0,0,0,1],[0,1,0,0,0,0,1,0]],
+  sqB:[[0,0,1,0,0,0,1,0],[1,0,0,1,1,0,0,1],[1,1,1,1,1,1,1,1],[1,1,0,1,1,0,1,1],[0,1,1,1,1,1,1,0],[0,0,1,0,0,1,0,0],[0,1,0,1,1,0,1,0],[1,0,1,0,0,1,0,1]],
+  crA:[[0,1,0,0,0,0,1,0],[0,0,1,0,0,1,0,0],[0,1,1,1,1,1,1,0],[1,1,0,1,1,0,1,1],[1,1,1,1,1,1,1,1],[1,0,1,1,1,1,0,1],[1,0,1,0,0,1,0,1],[0,0,1,0,0,1,0,0]],
+  crB:[[0,1,0,0,0,0,1,0],[1,0,0,1,1,0,0,1],[1,0,1,1,1,1,0,1],[1,1,1,1,1,1,1,1],[0,1,1,1,1,1,1,0],[0,0,1,1,1,1,0,0],[0,1,0,0,0,0,1,0],[1,0,0,0,0,0,0,1]],
+  ocA:[[0,0,1,1,1,1,0,0],[0,1,1,1,1,1,1,0],[1,1,0,1,1,0,1,1],[1,1,1,1,1,1,1,1],[1,1,0,1,1,0,1,1],[0,0,1,0,0,1,0,0],[0,1,0,1,1,0,1,0],[1,0,0,1,1,0,0,1]],
+  ocB:[[0,0,1,1,1,1,0,0],[1,1,1,1,1,1,1,1],[1,1,0,1,1,0,1,1],[1,1,1,1,1,1,1,1],[0,1,1,1,1,1,1,0],[0,1,0,0,0,0,1,0],[1,0,1,0,0,1,0,1],[0,0,0,1,1,0,0,0]],
+  tkA:[[0,1,0,1,1,0,1,0],[1,1,1,1,1,1,1,1],[1,0,1,1,1,1,0,1],[1,1,1,1,1,1,1,1],[1,0,0,1,1,0,0,1],[1,1,1,1,1,1,1,1],[0,1,1,0,0,1,1,0],[0,0,1,1,1,1,0,0]],
+  tkB:[[1,0,1,0,0,1,0,1],[1,1,1,1,1,1,1,1],[0,1,0,1,1,0,1,0],[1,1,1,1,1,1,1,1],[1,0,0,1,1,0,0,1],[0,1,1,1,1,1,1,0],[1,1,0,0,0,0,1,1],[0,1,1,0,0,1,1,0]],
+};
+// Each unique (sprite, scale, cssVar) combo is rendered to an
+// offscreen canvas once and blitted every frame instead of doing
+// 20+ fillRects + a shadowBlur pass per enemy per frame.
+const spriteCache = createSpriteCache();
+function drawSprite(sp, x, y, sz, cssVar) {
+  const img = spriteCache.getCanvas(sp, sz, cssVar);
+  ctx.drawImage(img, Math.floor(x), Math.floor(y));
+}
+
+// ---------- Stars ----------
+const STARS = Array.from({length: 90}, () => ({
+  x: Math.random()*W, y: Math.random()*H,
+  r: Math.random()*1.3 + 0.2,
+  sp: Math.random()*0.35 + 0.05,
+  a: Math.random()*0.5 + 0.25,
+}));
+function drawStars() {
+  ctx.fillStyle = css('--text');
+  STARS.forEach(s => {
+    s.y += s.sp; if (s.y > H) { s.y = 0; s.x = Math.random()*W; }
+    ctx.globalAlpha = s.a;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI*2);
+    ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+}
+
+// ---------- Particles ----------
+class Particle {
+  constructor(x,y,col,vx,vy,life,sz=3){ Object.assign(this,{x,y,col,vx,vy,life,ml:life,sz}); }
+  tick(){ this.x+=this.vx; this.y+=this.vy; this.vy+=0.06; this.life--; return this.life>0; }
+  draw(){
+    ctx.globalAlpha = this.life / this.ml;
+    ctx.fillStyle = this.col;
+    ctx.fillRect(this.x-this.sz/2, this.y-this.sz/2, this.sz, this.sz);
+    ctx.globalAlpha = 1;
+  }
+}
+let PARTS = [];
+function explode(x,y,col,n=18) {
+  for (let i=0;i<n;i++) {
+    const a = Math.random()*Math.PI*2, sp = Math.random()*5+0.8;
+    PARTS.push(new Particle(x,y,col,Math.cos(a)*sp,Math.sin(a)*sp,
+      Math.random()*28+12, Math.random()*3+1));
+  }
+}
+
+// ---------- Bunker ----------
+class Bunker {
+  constructor(x,y){
+    this.x=x; this.y=y; this.cw=7; this.ch=7; this.cols=11; this.rows=7;
+    this.g = Array.from({length:this.rows}, (_,r) =>
+      Array.from({length:this.cols}, (_,c) => {
+        if (r >= 4 && c >= 3 && c <= 7) return 0;          // arch
+        if (r === 0 && (c === 0 || c === this.cols-1)) return 0;
+        return 1;
+      })
+    );
+  }
+  get w(){ return this.cols*this.cw; }
+  get h(){ return this.rows*this.ch; }
+  get alive(){ return this.g.some(row => row.some(v => v)); }
+  overlaps(bx,by){
+    const col = Math.floor((bx - this.x) / this.cw);
+    const row = Math.floor((by - this.y) / this.ch);
+    if (row < 0 || row >= this.rows || col < 0 || col >= this.cols) return false;
+    return !!this.g[row][col];
+  }
+  chip(bx,by){
+    const col = Math.floor((bx - this.x) / this.cw);
+    const row = Math.floor((by - this.y) / this.ch);
+    if (row < 0 || row >= this.rows || col < 0 || col >= this.cols) return false;
+    if (!this.g[row][col]) return false;
+    this.g[row][col] = 0;
+    [[0,1],[0,-1],[1,0],[-1,0]].forEach(([dr,dc]) => {
+      const nr = row+dr, nc = col+dc;
+      if (nr>=0&&nr<this.rows&&nc>=0&&nc<this.cols && Math.random() < 0.45) this.g[nr][nc] = 0;
+    });
+    sfx.bhit();
+    return true;
+  }
+  draw(){
+    const col = css('--accent-3');
+    for (let r=0; r<this.rows; r++)
+      for (let c=0; c<this.cols; c++)
+        if (this.g[r][c]) {
+          // shadow
+          ctx.fillStyle = css('--text');
+          ctx.globalAlpha = 0.45;
+          ctx.fillRect(this.x + c*this.cw + 1, this.y + r*this.ch + 1, this.cw-1, this.ch-1);
+          ctx.globalAlpha = 1;
+          // body
+          ctx.fillStyle = col;
+          ctx.fillRect(this.x + c*this.cw, this.y + r*this.ch, this.cw-1, this.ch-1);
+        }
+  }
+}
+
+// ---------- UFO ----------
+class UFO {
+  constructor(){ this.active=false; this.timer=0; this.nextSpawn=500+Math.random()*700; this.ft=0; }
+  spawn(){
+    this.pts=[50,100,150,200,300][Math.floor(Math.random()*5)];
+    this.dir=Math.random()<0.5?1:-1;
+    this.x=this.dir>0?-55:W+55; this.y=48;
+    this.active=true; this.ft=0;
+    beep(200,'sawtooth'==='sawtooth'?0.08:0.08,'sawtooth',0.1,450);
+  }
+  update(){
+    this.timer++;
+    if (!this.active) {
+      if (this.timer >= this.nextSpawn) {
+        this.timer = 0;
+        this.nextSpawn = 500 + Math.random()*700;
+        this.spawn();
+      }
+      return;
+    }
+    this.x += 1.6 * this.dir; this.ft++;
+    if (this.ft % 12 === 0) sfx.ufoLoop(this.ft * 0.1);
+    if ((this.dir > 0 && this.x > W+55) || (this.dir < 0 && this.x < -55)) this.active = false;
+  }
+  draw(){
+    if (!this.active) return;
+    const c1 = css('--accent-hot');
+    const c2 = css('--accent-3');
+    ctx.shadowColor = c1; ctx.shadowBlur = 12;
+    ctx.fillStyle = c1;
+    ctx.beginPath(); ctx.ellipse(this.x, this.y, 26, 10, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = c2;
+    ctx.beginPath(); ctx.ellipse(this.x, this.y-7, 13, 9, 0, Math.PI, 0); ctx.fill();
+    [-13, 0, 13].forEach((lx) => {
+      ctx.fillStyle = this.ft % 18 < 9 ? css('--brick-4') : css('--accent-hot');
+      ctx.beginPath(); ctx.arc(this.x + lx, this.y + 5, 2.5, 0, Math.PI*2); ctx.fill();
+    });
+    ctx.shadowBlur = 0;
+  }
+  bounds(){ return { x: this.x-26, y: this.y-10, w: 52, h: 20 }; }
+}
+
+// ---------- Formation patterns ----------
+// Returns a rows×cols boolean mask. Cells that are `false` are skipped
+// when spawning enemies, so the remaining cells form a non-rectangular
+// shape that still behaves like a normal grid (wall flip + descend logic
+// uses minX/maxX of alive enemies, so it handles partial formations fine).
+function buildFormationMask(pattern, rows, cols) {
+  const m = Array.from({length: rows}, () => new Array(cols).fill(true));
+  switch (pattern) {
+    case 'wedge': {
+      // V-shape: narrow at top, widens toward the bottom.
+      const mid = (cols - 1) / 2;
+      for (let r = 0; r < rows; r++)
+        for (let c = 0; c < cols; c++)
+          if (Math.abs(c - mid) > r + 1) m[r][c] = false;
+      break;
+    }
+    case 'zigzag': {
+      // Checkerboard — removes half the enemies but survivors line up in
+      // diagonals, which makes aiming feel different.
+      for (let r = 0; r < rows; r++)
+        for (let c = 0; c < cols; c++)
+          if ((r + c) % 2 === 1) m[r][c] = false;
+      break;
+    }
+    case 'pincer': {
+      // Two columns with a gap down the middle — forces the player to
+      // pick a side or thread the gap.
+      const gapStart = Math.floor(cols * 0.38);
+      const gapEnd   = Math.ceil(cols * 0.62);
+      for (let r = 0; r < rows; r++)
+        for (let c = gapStart; c < gapEnd; c++) m[r][c] = false;
+      break;
+    }
+    case 'diamond': {
+      // Rhombus. Edges are hollow.
+      const cMid = (cols - 1) / 2;
+      const rMid = (rows - 1) / 2;
+      for (let r = 0; r < rows; r++)
+        for (let c = 0; c < cols; c++) {
+          const d = Math.abs(c - cMid) / Math.max(1, cMid) +
+                    Math.abs(r - rMid) / Math.max(1, rMid);
+          if (d > 1.0) m[r][c] = false;
+        }
+      break;
+    }
+    case 'grid':
+    default:
+      // leave all true
+      break;
+  }
+  return m;
+}
+
+// Promote N alive enemies to 'brute' and M to 'seeker' kinds.
+// Brutes are heavier (3 HP, high points); seekers fire at the player.
+function promoteElites(enemies, brutes, seekers) {
+  // Pick candidates from rows >= 1 so we keep the top row as the elite-free
+  // "row zero" that already has tanks. Shuffle indices so elites aren't
+  // clumped.
+  const pool = [];
+  for (let i = 0; i < enemies.length; i++) {
+    if (enemies[i].alive) pool.push(i);
+  }
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  let pIdx = 0;
+  for (let k = 0; k < brutes && pIdx < pool.length; k++, pIdx++) {
+    const e = enemies[pool[pIdx]];
+    e.type = 'brute';
+    e.col  = '--accent-hot';
+    e.hp   = 3;
+    e.pts  = 150;
+    e.sz   = 4;           // bigger sprite
+    e.spA  = SP.tkA;      // reuse tank sprite, different color
+    e.spB  = SP.tkB;
+  }
+  for (let k = 0; k < seekers && pIdx < pool.length; k++, pIdx++) {
+    const e = enemies[pool[pIdx]];
+    e.type = 'seeker';
+    e.col  = '--accent-3';
+    e.hp   = 2;
+    e.pts  = 80;
+    e.seeker = true;      // flag used by enemy shooting to aim at player
+  }
+}
+
+// Juggernauts: slow, grey-ish, almost boss-sized, ~5 HP. Spawned from
+// level 15+. Implemented as in-place promotion of an existing enemy so
+// they still obey formation movement and fit the wave density.
+function promoteJuggernauts(enemies, count) {
+  if (!count) return;
+  // Prefer enemies in the back rows so the visual "wall" sits deep and
+  // the player can chip away while handling the front line.
+  const pool = [];
+  for (let i = 0; i < enemies.length; i++) {
+    if (enemies[i].alive && enemies[i].type !== 'juggernaut'
+        && enemies[i].type !== 'ward'
+        && enemies[i].type !== 'brute'
+        && enemies[i].type !== 'seeker') {
+      pool.push(i);
+    }
+  }
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  for (let k = 0; k < count && k < pool.length; k++) {
+    const e = enemies[pool[k]];
+    e.type = 'juggernaut';
+    e.col  = '--unbreakable';   // grey palette slot
+    e.hp   = 10;                // user spec: 10 hits to kill (was 5)
+    e.pts  = 400;               // higher payoff to match the tougher kill
+    e.sz   = 7;                 // ~56px sprite, compared to boss ~88px hull
+    e.spA  = SP.tkA;
+    e.spB  = SP.tkB;
+  }
+}
+
+// Wards: laser-immune enemies with a new color. Spawned from level 20+.
+// Slightly tougher than a small drone; their whole point is to punish
+// laser-reliant players by forcing them to use bullets.
+function promoteWards(enemies, count) {
+  if (!count) return;
+  const pool = [];
+  for (let i = 0; i < enemies.length; i++) {
+    if (enemies[i].alive && enemies[i].type !== 'juggernaut'
+        && enemies[i].type !== 'ward'
+        && enemies[i].type !== 'brute'
+        && enemies[i].type !== 'seeker') {
+      pool.push(i);
+    }
+  }
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  for (let k = 0; k < count && k < pool.length; k++) {
+    const e = enemies[pool[k]];
+    e.type = 'ward';
+    e.col  = '--accent-2';      // cyan — clear visual signal
+    e.hp   = 3;
+    e.pts  = 200;
+    e.sz   = 3;
+    e.laserImmune = true;
+    e.spA  = SP.ocA;
+    e.spB  = SP.ocB;
+  }
+}
+
+// Volleyers: green enemies from level 26+. They fire a 3-bullet spread
+// on each shot instead of a single bullet, so they're the late-game
+// "suppressive fire" threat — not individually tough but will fill the
+// screen with lead fast.
+function promoteVolleyers(enemies, count) {
+  if (!count) return;
+  const pool = [];
+  for (let i = 0; i < enemies.length; i++) {
+    const e = enemies[i];
+    if (e.alive && e.type !== 'juggernaut' && e.type !== 'ward'
+        && e.type !== 'brute' && e.type !== 'seeker'
+        && e.type !== 'volleyer') {
+      pool.push(i);
+    }
+  }
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  for (let k = 0; k < count && k < pool.length; k++) {
+    const e = enemies[pool[k]];
+    e.type = 'volleyer';
+    e.col  = '--accent-grn';
+    e.hp   = 2;
+    e.pts  = 160;
+    e.sz   = 3;
+    e.volley = true;        // enemy-shoot branch checks this flag
+    e.spA  = SP.crA;
+    e.spB  = SP.crB;
+  }
+}
+
+// ---------- Boss ----------
+// Bosses spawn at every 5th level (5, 10, 15, ...). Each tier scales
+// HP and adds more aggressive attack patterns. Kept deliberately
+// single-entity so the fight is legible — the grid / bunker fluff of
+// normal levels is stripped.
+class Boss {
+  constructor(tier, level) {
+    this.tier  = tier;              // 1, 2, 3, ...
+    this.level = level;
+    this.maxHp = 18 + tier * 14;    // T1=32, T2=46, T3=60
+    this.hp    = this.maxHp;
+    this.x     = W / 2;
+    this.y     = 90;
+    this.vx    = 1.2 + tier * 0.25; // horizontal sweep speed
+    this.dir   = Math.random() < 0.5 ? -1 : 1;
+    this.ft    = 0;
+    this.shootCD = 60;              // frames until next shot
+    this.shootCDMax = Math.max(24, 70 - tier * 6);
+    this.hitFlash = 0;
+    this.r     = 44 + tier * 4;     // hitbox radius
+    this.phase = 0;                 // 0 = full hp, 1 = <50%, 2 = <25%
+    this.pattern = 0;
+    this.alive = true;
+    // Laser-resilience state. Bosses don't take damage from the laser
+    // (user spec), but we still show an "absorbing" visual + emit
+    // particles at the intersection point so it's obvious *why* nothing
+    // is happening.
+    this.absorbFlash = 0;           // frames of halo glow remaining
+    this.absorbTick  = 0;           // used to throttle particle emission
+  }
+  // Called while the laser beam is column-aligned with the boss.
+  // Does NO damage; only triggers the absorb visual.
+  absorbLaser(laserX) {
+    if (!this.alive) return;
+    this.absorbFlash = 6;
+    this.absorbTick++;
+    if (this.absorbTick % 3 === 0) {
+      // small cyan particles at the top of the boss, drifting outward —
+      // reads as a shield deflecting the beam.
+      for (let i = 0; i < 2; i++) {
+        const a = -Math.PI / 2 + rand(-0.9, 0.9);
+        const sp = rand(1.2, 2.6);
+        PARTS.push(new Particle(
+          laserX + rand(-4, 4), this.y - this.r * 0.45,
+          css('--accent-2'),
+          Math.cos(a) * sp, Math.sin(a) * sp,
+          rand(8, 14), rand(1.5, 2.5)
+        ));
+      }
+    }
+  }
+  bounds() {
+    return { x: this.x - this.r, y: this.y - this.r * 0.55,
+             w: this.r * 2,      h: this.r * 1.1 };
+  }
+  updatePhase() {
+    const frac = this.hp / this.maxHp;
+    const p = frac < 0.25 ? 2 : frac < 0.5 ? 1 : 0;
+    if (p !== this.phase) {
+      this.phase = p;
+      // speed up + shoot faster each phase
+      this.vx *= 1.25;
+      this.shootCDMax = Math.max(18, this.shootCDMax - 10);
+    }
+  }
+  update(game) {
+    if (!this.alive) return;
+    this.ft++;
+    this.hitFlash    = Math.max(0, this.hitFlash - 1);
+    this.absorbFlash = Math.max(0, this.absorbFlash - 1);
+    // Sway side-to-side + gentle bob
+    this.x += this.vx * this.dir;
+    if (this.x > W - this.r - 8) { this.x = W - this.r - 8; this.dir = -1; }
+    if (this.x < this.r + 8)     { this.x = this.r + 8;     this.dir =  1; }
+    this.y = 90 + Math.sin(this.ft * 0.035) * 12;
+
+    this.shootCD--;
+    if (this.shootCD <= 0) {
+      this.shootCD = this.shootCDMax;
+      this.pattern = (this.pattern + 1) % (3 + this.tier);
+      this.shoot(game);
+    }
+    this.updatePhase();
+  }
+  shoot(game) {
+    sfx.eshoot();
+    const col = '--accent-hot';
+    // Pattern selection — more patterns unlock as phase advances.
+    const p = this.pattern;
+    const speed = 3.0 + this.tier * 0.3 + this.phase * 0.4;
+
+    const push = (vx, vy, zigzag = false) => {
+      game.eBullets.push({ x: this.x, y: this.y + this.r * 0.5,
+                           col, vy, vx, zigzag, t: 0 });
+    };
+
+    if (p === 0) {
+      // triple spread
+      push(-1.6, speed);
+      push( 0,   speed);
+      push( 1.6, speed);
+    } else if (p === 1) {
+      // aimed shot at player
+      const dx = game.px - this.x;
+      const dy = game.py - this.y;
+      const L  = Math.max(1, Math.sqrt(dx * dx + dy * dy));
+      push((dx / L) * speed, (dy / L) * speed);
+    } else if (p === 2) {
+      // ring burst (5 bullets fanned)
+      for (let a = -2; a <= 2; a++) {
+        const ang = Math.PI / 2 + a * 0.28;
+        push(Math.cos(ang) * speed, Math.sin(ang) * speed);
+      }
+    } else if (p === 3) {
+      // fast zigzag pair
+      push(-0.5, speed + 1, true);
+      push( 0.5, speed + 1, true);
+    } else {
+      // dense down-burst
+      for (let a = -3; a <= 3; a++) push(a * 0.9, speed - 0.3);
+    }
+  }
+  hit() {
+    this.hp--;
+    this.hitFlash = 8;
+    sfx.bhit();
+    if (this.hp <= 0) {
+      this.alive = false;
+      sfx.edie();
+    }
+  }
+  draw() {
+    if (!this.alive) return;
+    const baseCol = this.hitFlash > 0 ? css('--ball') : css('--accent-hot');
+    const rimCol  = css('--accent-3');
+    const coreCol = css('--accent-2');
+
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    const wobble = Math.sin(this.ft * 0.18) * 3;
+
+    // absorb halo (only when a laser is currently being absorbed)
+    if (this.absorbFlash > 0) {
+      const aCol = css('--accent-2');
+      const pulse = 1 + Math.sin(this.ft * 0.9) * 0.08;
+      ctx.save();
+      ctx.globalAlpha = 0.35 + (this.absorbFlash / 6) * 0.5;
+      ctx.shadowColor = aCol; ctx.shadowBlur = 32;
+      ctx.strokeStyle = aCol;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, (this.r + 10) * pulse, (this.r * 0.55 + 10) * pulse, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      // inner hex-scatter tick marks
+      ctx.globalAlpha *= 0.7;
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2 + this.ft * 0.04;
+        const x1 = Math.cos(a) * (this.r + 4);
+        const y1 = Math.sin(a) * (this.r * 0.55 + 4);
+        const x2 = Math.cos(a) * (this.r + 14);
+        const y2 = Math.sin(a) * (this.r * 0.55 + 14);
+        ctx.beginPath();
+        ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // outer hull (ellipse)
+    ctx.shadowColor = baseCol; ctx.shadowBlur = 24;
+    ctx.fillStyle = baseCol;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, this.r, this.r * 0.55, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // rim band
+    ctx.shadowBlur = 10;
+    ctx.fillStyle = rimCol;
+    ctx.fillRect(-this.r + 6, -3, this.r * 2 - 12, 6);
+
+    // core (glowing reactor)
+    const coreR = 10 + this.tier * 2 + wobble * 0.5;
+    ctx.fillStyle = coreCol;
+    ctx.shadowColor = coreCol; ctx.shadowBlur = 18;
+    ctx.beginPath();
+    ctx.arc(0, 0, coreR, 0, Math.PI * 2);
+    ctx.fill();
+
+    // spikes for higher tiers
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = rimCol;
+    const spikes = 4 + this.tier;
+    for (let i = 0; i < spikes; i++) {
+      const a = (i / spikes) * Math.PI * 2 + this.ft * 0.008;
+      const sx = Math.cos(a) * (this.r + 4);
+      const sy = Math.sin(a) * (this.r * 0.55 + 4);
+      ctx.fillRect(sx - 3, sy - 3, 6, 6);
+    }
+    ctx.restore();
+
+    // HP bar (under the boss)
+    const bw = Math.min(W - 80, 520);
+    const bx = (W - bw) / 2;
+    const by = 28;
+    ctx.fillStyle = css('--bg');
+    ctx.fillRect(bx - 2, by - 2, bw + 4, 12);
+    ctx.fillStyle = css('--grid-line');
+    ctx.fillRect(bx, by, bw, 8);
+    ctx.fillStyle = css('--accent-hot');
+    ctx.fillRect(bx, by, bw * (this.hp / this.maxHp), 8);
+    // segment ticks every 10 hp for readability
+    ctx.fillStyle = css('--bg');
+    const segs = Math.floor(this.maxHp / 10);
+    for (let i = 1; i < segs; i++) {
+      ctx.fillRect(bx + (bw * i / segs) - 1, by, 2, 8);
+    }
+    // label
+    ctx.fillStyle = css('--text');
+    ctx.font = '10px "Press Start 2P"';
+    ctx.textAlign = 'center';
+    const names = ['WARDEN','OVERLORD','REVENANT','VOIDKING','ABYSSAL'];
+    const name = names[Math.min(this.tier - 1, names.length - 1)];
+    ctx.fillText(name + ' \u2022 LVL ' + this.level, W / 2, by - 6);
+  }
+}
+
+// ---------- Level config ----------
+// computeLevelCfg(level) replaces the old hardcoded LVLS table so the game
+// can scale to any level and so we can carve out boss fights at every
+// multiple of 5 without re-indexing everything. The speed curve is
+// deliberately gentler at the low end — old level 5 ran at spd 1.15 with a
+// 1.8x min-alive multiplier which made the last 2-3 enemies blitz across
+// the screen; the new curve caps early-game shenanigans.
+// First entry is what the player sees at level 8 — keep it visually
+// distinct from the L1-7 full grid so the variety moment lands.
+const FORMATION_POOL = ['wedge', 'zigzag', 'pincer', 'diamond', 'grid'];
+function computeLevelCfg(level) {
+  // Bosses every 5 levels: 5, 10, 15, ...
+  if (level > 0 && level % 5 === 0) {
+    return { boss: true, tier: Math.floor(level / 5), level };
+  }
+  // "effective" difficulty index skips boss slots so progression between
+  // bosses feels continuous rather than having a difficulty jump at L6/L11.
+  const eff = level - Math.floor(level / 5);
+
+  const rows = Math.min(2 + Math.floor((eff - 1) / 2), 5);
+  const cols = Math.min(7 + Math.floor((eff - 1) / 2), 12);
+
+  // Base horizontal step, per frame. Old curve: 0.55 → 1.85.
+  // New curve: 0.38 → 1.70, with a flatter slope in the first 4 levels.
+  const spd = Math.min(0.38 + (eff - 1) * 0.11, 1.85);
+
+  // Enemy shoot interval (frames). Lower = more bullets.
+  const si  = Math.max(36, 115 - (eff - 1) * 9);
+
+  const bk   = eff < 3 ? 4 : eff < 6 ? 3 : eff < 9 ? 2 : 1;
+  const tank = eff >= 4;
+  const ufo  = eff >= 2;
+
+  // Formation variety kicks in at level 8 — before that it's the classic
+  // full-grid so players aren't whiplashed by new patterns before they've
+  // learned the base game.
+  const pattern = level >= 8
+    ? FORMATION_POOL[(level - 8) % FORMATION_POOL.length]
+    : 'grid';
+
+  // Elite enemies from level 11+. Kept sparse so the screen isn't mobbed:
+  // a handful of brutes (3 HP, high points) and seekers (aim bullets at
+  // the player). Counts scale slowly with level.
+  const brutes  = level >= 11 ? Math.min(2 + Math.floor((level - 11) / 4), 6) : 0;
+  const seekers = level >= 11 ? Math.min(1 + Math.floor((level - 11) / 5), 4) : 0;
+
+  // Juggernauts (grey tanks, 10 HP, nearly boss-sized) from level 15+.
+  // Wards (laser-immune cyan drones) from level 20+.
+  // Volleyers (green, fire 3-bullet spread) from level 26+.
+  // These promotions mutate existing enemies in the grid rather than
+  // spawning extras, so the formation count stays balanced.
+  const juggernauts = level >= 15 ? Math.min(1 + Math.floor((level - 15) / 3), 3) : 0;
+  const wards       = level >= 20 ? Math.min(2 + Math.floor((level - 20) / 3), 5) : 0;
+  const volleyers   = level >= 26 ? Math.min(2 + Math.floor((level - 26) / 3), 5) : 0;
+
+  return {
+    boss: false, level,
+    rows, cols, spd, si, bk, tank, ufo,
+    pattern, brutes, seekers, juggernauts, wards, volleyers,
+  };
+}
+
+// ---------- Perks ----------
+// All perks cap at maxLv 5. Gameplay rule: no perk can exceed the
+// *lowest-leveled* perk by more than 2 levels (enforced in Game._canUpgrade).
+//
+// Laser tuning (vs. pre-nerf):
+//   cooldown — was [20,15,10,8,6,4]s, now [--,25,20,16,13,10]s  (longer)
+//   fire time — was flat 55 frames, now [30,34,38,42,46] per level (shorter)
+// So even a maxed laser commits you for <0.8s and won't be ready again
+// for 10s. It's a "panic button" tool, not a spam weapon.
+const LASER_COOLDOWN_S  = [0, 25, 20, 16, 13, 10];       // seconds
+const LASER_FIRE_FRAMES = [0, 30, 34, 38, 42, 46];       // 60fps
+
+const PERKS = [
+  { id:'lives',  name:'EXTRA LIFE',    icon:'♥', maxLv:5, color:()=>css('--accent-hot'),
+    desc: lv => `+1 life granted`,
+    apply: G => { G.lives = Math.min(G.lives + 1, 8); }
+  },
+  { id:'shield', name:'ENERGY SHIELD', icon:'◈', maxLv:5, color:()=>css('--accent-2'),
+    desc: lv => `Absorb ${lv} hit${lv>1?'s':''}`,
+    apply: (G,lv) => { G.shieldHp = lv; }
+  },
+  { id:'laser',  name:'PLASMA LASER',  icon:'⚡', maxLv:5, color:()=>css('--accent-3'),
+    desc: lv => `CD ${LASER_COOLDOWN_S[lv]}s \u2022 ${(LASER_FIRE_FRAMES[lv]/60).toFixed(2)}s beam  [Z]`,
+    apply: (G,lv) => {
+      G.laserMax  = LASER_COOLDOWN_S[lv]  * 60;
+      G.laserTMax = LASER_FIRE_FRAMES[lv];
+    }
+  },
+  { id:'rate',   name:'FIRE RATE',     icon:'▲', maxLv:5, color:()=>css('--brick-4'),
+    desc: lv => ['Faster','Much faster','Rapid','Hyper','MAX'][lv-1] + ' fire rate',
+    apply: (G,lv) => { G.rateMax = Math.max(5, 18 - lv*3); }
+  },
+  { id:'spread', name:'SPREAD SHOT',   icon:'✦', maxLv:5, color:()=>css('--brick-1'),
+    // Caps at 5 bullets (user spec: "max 5 bullets at level 5"). Lv5 keeps
+    // the 5-bullet count but tightens grouping (handled in shoot()).
+    desc: lv => `${Math.min(lv + 1, 5)} bullets per shot` + (lv >= 5 ? ' (tight)' : ''),
+    apply: (G,lv) => { G.spread = Math.min(lv + 1, 5); }
+  },
+];
+
+// ---------- Game state ----------
+class Game {
+  constructor() {
+    this.hs = parseInt(localStorage.getItem('na.hs') || '0');
+    this.state = 'menu';  // menu | playing | paused | gameover | upgrade
+    this.keys = {};
+    this.touchDir = 0;
+    this._reset();
+  }
+
+  _reset() {
+    this.px = W/2;
+    this.py = H - 46;             // lower, well clear of bunkers
+    this.pw = 44;
+    this.ph = 22;
+    this.lives = 3;
+    this.score = 0;
+    this.level = 1;
+    this.pLv = { lives:0, shield:0, laser:0, rate:0, spread:0 };
+    this.shieldHp = 0; this.shieldFlash = 0;
+    this.laserMax = 0; this.laserCD = 0; this.laserOn = false; this.laserT = 0; this.laserTMax = 0;
+    this.rateMax = 18; this.rateCD = 0;
+    this.spread = 1;
+    this.enemies = []; this.eDir = 1; this.eSpd = 0;
+    this.eFrame = 0; this.eFT = 0;
+    this.eST = 0; this.eSI = 60;
+    this.pBullets = []; this.eBullets = [];
+    this.bunkers = [];
+    this.ufo = new UFO();
+    this.boss = null;
+    this.dying = false; this.dyT = 0;
+    this.flash = 0;
+    this.opts = null;
+  }
+
+  setupLevel() {
+    const cfg = computeLevelCfg(this.level);
+    this.enemies = []; this.pBullets = []; this.eBullets = [];
+    this.dying = false; this.px = W/2;
+    this.eFrame = 0; this.eFT = 0;
+    // safety: ensure no laser / fire-rate carries over into the new wave
+    this.laserOn = false;
+    this.laserT = 0;
+    // Laser isn't ready at level start — player must wait a full
+    // cooldown before the first beam of each wave (user spec). If the
+    // player doesn't have the laser yet, laserMax is 0 so this is a
+    // no-op.
+    this.laserCD = this.laserMax;
+    this.rateCD = 0;
+    this.boss = null;
+
+    // ---------- Boss levels ----------
+    if (cfg.boss) {
+      this.eSpd = 0; this.eSI = 9999; this.eDir = 1;
+      this.boss = new Boss(cfg.tier, this.level);
+      // Minimal bunkers during boss fight — the boss is the whole show.
+      this.bunkers = [];
+      const bunkerY = H - 150;
+      const bn = 2;
+      const bsp = W / (bn + 1);
+      for (let i = 0; i < bn; i++) {
+        const bx = bsp * (i + 1) - 38;
+        this.bunkers.push(new Bunker(bx, bunkerY));
+      }
+      this.ufo.active = false;
+      return;
+    }
+
+    // ---------- Normal levels ----------
+    this.eSpd = cfg.spd; this.eSI = cfg.si; this.eDir = 1;
+
+    const SX = 55, SY = 40;
+    const startX = (W - cfg.cols*SX)/2 + SX/2;
+    const startY = 48;
+
+    // Build a formation mask so patterns past level 8 remove cells to
+    // form non-rectangular shapes (V-wedge, zigzag, etc).
+    const mask = buildFormationMask(cfg.pattern, cfg.rows, cfg.cols);
+
+    for (let r = 0; r < cfg.rows; r++) {
+      for (let c = 0; c < cfg.cols; c++) {
+        if (!mask[r][c]) continue;
+        let type, col, pts, hp, spA, spB, sz;
+        if (r === 0 && cfg.tank && c % 4 === 0) {
+          type='tank';  col='--brick-4';    pts=100; hp=3; spA=SP.tkA; spB=SP.tkB; sz=4;
+        } else if (r === 0) {
+          type='small'; col='--brick-3';    pts=40;  hp=1; spA=SP.sqA; spB=SP.sqB; sz=3;
+        } else if (r <= 2) {
+          type='med';   col='--brick-1';    pts=20;  hp=1; spA=SP.crA; spB=SP.crB; sz=3;
+        } else {
+          type='big';   col='--brick-2';    pts=10;  hp=2; spA=SP.ocA; spB=SP.ocB; sz=3;
+        }
+        this.enemies.push({ x:startX+c*SX, y:startY+r*SY, type, col, pts, hp, spA, spB, sz, alive:true, ft:0 });
+      }
+    }
+
+    // Promote some existing enemies to elite tiers at level 11+.
+    if (cfg.brutes > 0 || cfg.seekers > 0) {
+      promoteElites(this.enemies, cfg.brutes, cfg.seekers);
+    }
+    // Juggernauts from L15+ (grey tanks ~5 HP).
+    if (cfg.juggernauts > 0) {
+      promoteJuggernauts(this.enemies, cfg.juggernauts);
+    }
+    // Wards from L20+ (cyan, laser-immune).
+    if (cfg.wards > 0) {
+      promoteWards(this.enemies, cfg.wards);
+    }
+    // Volleyers from L26+ (green, fire 3-bullet spread).
+    if (cfg.volleyers > 0) {
+      promoteVolleyers(this.enemies, cfg.volleyers);
+    }
+
+    // Bunkers: positioned above the ship with enough clearance
+    this.bunkers = [];
+    const bn = cfg.bk;
+    const bsp = W / (bn + 1);
+    const bunkerY = H - 150; // leaves ~100px between bunker bottom and ship top
+    for (let i = 0; i < bn; i++) {
+      const bx = bsp * (i + 1) - 38;
+      this.bunkers.push(new Bunker(bx, bunkerY));
+    }
+
+    if (!cfg.ufo) this.ufo.active = false;
+  }
+
+  // ------- Input -------
+  key(e, down) {
+    this.keys[e.code] = down;
+    if (!down) return;
+    if (this.state === 'playing' && !this.dying) {
+      if (e.code === 'Space') this.shoot();
+      if (e.code === 'KeyZ' || e.code === 'KeyX') this.fireLaser();
+    }
+    if (this.state === 'upgrade' && this.opts) {
+      if (e.code === 'Digit1' || e.code === 'Numpad1') this.pick(0);
+      if (e.code === 'Digit2' || e.code === 'Numpad2') this.pick(1);
+      if (e.code === 'Digit3' || e.code === 'Numpad3') this.pick(2);
+      if (e.code === 'Digit4' || e.code === 'Numpad4') this.pick(3);
+      if (e.code === 'Digit5' || e.code === 'Numpad5') this.pick(4);
+    }
+    if (e.code === 'KeyP' && (this.state === 'playing' || this.state === 'paused')) {
+      if (this.state === 'playing') { this.state = 'paused'; showOverlay('pauseScreen'); }
+      else { this.state = 'playing'; hideAllOverlays(); }
+    }
+    if (e.code === 'KeyM') { audio.toggle(); updateMuteLabel(); }
+  }
+
+  shoot() {
+    if (this.rateCD > 0) return;
+    this.rateCD = this.rateMax;
+    sfx.shoot();
+    if (this.spread === 1) {
+      this.pBullets.push({ x: this.px, y: this.py - this.ph/2, vy: -12, vx: 0 });
+    } else {
+      const gap = 10;
+      const off = -(this.spread - 1) * gap / 2;
+      for (let i = 0; i < this.spread; i++) {
+        const dx = off + i*gap;
+        this.pBullets.push({ x: this.px + dx, y: this.py - this.ph/2, vy: -12, vx: dx * 0.04 });
+      }
+    }
+  }
+
+  fireLaser() {
+    if (!this.laserMax || this.laserCD > 0) return;
+    // Per-level fire duration (see LASER_FIRE_FRAMES). Fallback to 30
+    // if somehow called before a laser perk was applied.
+    const fireFrames = this.laserTMax || 30;
+    this.laserOn = true;
+    this.laserT = fireFrames;
+    this.laserCD = this.laserMax;
+    sfx.laser();
+  }
+
+  // Walk every bunker cell in the laser's vertical column from the
+  // player upward. Returns the y at which the beam is blocked —
+  // defaults to the top of the play area (40) if the column is clear.
+  // Used to clip both the damage loop and the rendered beam so the
+  // player's own bunkers physically stop the laser (user spec: "laser
+  // should not pass through walls; it vaporizes like a bullet").
+  computeLaserStop() {
+    let stopY = 40;                    // default: beam reaches top of play area
+    const colX = this.px;
+    for (let i = 0; i < this.bunkers.length; i++) {
+      const bk = this.bunkers[i];
+      if (colX < bk.x || colX > bk.x + bk.w) continue;
+      const c = Math.floor((colX - bk.x) / bk.cw);
+      if (c < 0 || c >= bk.cols) continue;
+      // Scan from the bunker's bottom row upward; the first live cell
+      // is the one the laser hits first (closest to the player). Its
+      // bottom edge is where the beam stops.
+      for (let r = bk.rows - 1; r >= 0; r--) {
+        if (bk.g[r][c]) {
+          const cellBottom = bk.y + (r + 1) * bk.ch;
+          if (cellBottom > stopY) stopY = cellBottom;
+          break;
+        }
+      }
+    }
+    return stopY;
+  }
+
+  pick(i) {
+    if (!this.opts || i < 0 || i >= this.opts.length) return;
+    const entry = this.opts[i];
+    const def   = entry.def;
+    // Gate by _canUpgrade so hotkeys can't sneak past the maxLv or
+    // 2-level-gap rule (the UI already disables these cards, but
+    // keyboard input shouldn't care about that).
+    if (!this._canUpgrade(def)) {
+      if (sfx.bhit) sfx.bhit();   // gentle "no" sound if available
+      return;
+    }
+    this.pLv[def.id]++;
+    def.apply(this, this.pLv[def.id]);
+    sfx.upgrade();
+    this.level++;
+    this.state = 'playing';
+    this.setupLevel();
+    hideAllOverlays();
+    updateHUD();
+    setTimeout(() => sfx.lvlup(), 200);
+  }
+
+  // Is this perk legal to upgrade right now?
+  //   1. Must not already be at its maxLv cap (hard 5 for all perks).
+  //   2. After the upgrade, no two perks can differ by more than 2
+  //      levels. This keeps builds balanced per user spec.
+  _canUpgrade(def) {
+    const cur = this.pLv[def.id];
+    if (cur >= def.maxLv) return false;
+    const newLv = cur + 1;
+    let minOther = Infinity;
+    for (const p of PERKS) {
+      if (p.id === def.id) continue;
+      if (this.pLv[p.id] < minOther) minOther = this.pLv[p.id];
+    }
+    if (minOther === Infinity) return true;   // only one perk exists
+    return (newLv - minOther) <= 2;
+  }
+
+  // Return all 5 perks, in a stable order, with per-card availability
+  // metadata computed once per wave-clear. The upgrade UI no longer
+  // rotates through a subset — the player can always see their full
+  // build.
+  getOpts() {
+    return PERKS.map(def => ({
+      def,
+      maxed:   this.pLv[def.id] >= def.maxLv,
+      canPick: this._canUpgrade(def),
+    }));
+  }
+
+  // ------- Update -------
+  update() {
+    if (this.state !== 'playing') return;
+    this.flash = Math.max(0, this.flash - 1);
+    this.shieldFlash = Math.max(0, this.shieldFlash - 1);
+
+    if (this.dying) {
+      this.dyT++;
+      if (this.dyT > 85) {
+        this.dying = false; this.dyT = 0;
+        if (this.lives <= 0) {
+          if (this.score > this.hs) { this.hs = this.score; localStorage.setItem('na.hs', this.hs); }
+          this.state = 'gameover';
+          document.getElementById('finalScore').textContent = pad(this.score, 6);
+          document.getElementById('finalLevel').textContent = pad(this.level, 2);
+          document.getElementById('newBestMsg').style.display = (this.score > 0 && this.score >= this.hs) ? 'block' : 'none';
+          // Post to the public scoreboard (fire-and-forget).
+          if (window.NostalgiaScores) {
+            window.NostalgiaScores.submitAndReport(
+              'neon-abyss', this.score, document.getElementById('scoreStatus')
+            );
+          }
+          showOverlay('gameoverScreen');
+          updateHUD();
+        }
+      }
+      PARTS = PARTS.filter(p => p.tick());
+      return;
+    }
+
+    // player move (keyboard + touch)
+    let mv = 0;
+    if (this.keys['ArrowLeft']  || this.keys['KeyA']) mv -= 1;
+    if (this.keys['ArrowRight'] || this.keys['KeyD']) mv += 1;
+    if (this.touchDir) mv = this.touchDir;
+    this.px = clamp(this.px + mv * 5, this.pw/2 + 4, W - this.pw/2 - 4);
+
+    // cooldowns
+    this.rateCD = Math.max(0, this.rateCD - 1);
+    if (this.laserCD > 0) this.laserCD--;
+
+    // laser beam
+    if (this.laserOn) {
+      this.laserT--;
+      if (this.laserT <= 0) this.laserOn = false;
+      else {
+        // Bunkers block the beam. Anything above stopY is out of reach;
+        // anything in [stopY, player.py] is still fair game.
+        const stopY = this.computeLaserStop();
+        const enemies = this.enemies;
+        for (let i = 0; i < enemies.length; i++) {
+          const e = enemies[i];
+          if (!e.alive) continue;
+          // Only enemies in the beam's active vertical range can be hit.
+          if (e.y <= stopY) continue;
+          if (Math.abs(e.x - this.px) < e.sz*4 + 5 && e.y < this.py) {
+            // Wards (and any other laserImmune enemies) absorb the beam
+            // instead of taking damage. Emit a small cyan sparkle so the
+            // player sees the reason the enemy isn't dying.
+            if (e.laserImmune) {
+              if ((this.laserT & 3) === 0) {
+                for (let k = 0; k < 2; k++) {
+                  const a = rand(0, Math.PI * 2), sp = rand(0.8, 1.8);
+                  PARTS.push(new Particle(
+                    e.x + rand(-6, 6), e.y,
+                    css('--accent-2'),
+                    Math.cos(a) * sp, Math.sin(a) * sp,
+                    rand(6, 10), 2
+                  ));
+                }
+              }
+              continue;
+            }
+            e.hp--; e.ft = 6;
+            if (e.hp <= 0) {
+              e.alive = false;
+              this.score += e.pts;
+              explode(e.x, e.y, css(e.col), 24);
+              sfx.edie();
+            }
+          }
+        }
+        // UFO is also blocked if it's above the stop point.
+        if (this.ufo.active && this.ufo.y > stopY &&
+            Math.abs(this.ufo.x - this.px) < 30) {
+          this.score += this.ufo.pts;
+          explode(this.ufo.x, this.ufo.y, css('--accent-hot'), 35);
+          this.ufo.active = false; sfx.edie(); sfx.bonus();
+        }
+        // Bosses are laser-resilient: the beam is absorbed, no damage.
+        // The absorbLaser() visual + particle burst makes this legible.
+        // Boss fights have no bunkers in the column, so stopY stays at 40
+        // and this branch runs normally.
+        if (this.boss && this.boss.alive) {
+          const bb = this.boss.bounds();
+          if (bb.y + bb.h > stopY &&
+              this.px > bb.x && this.px < bb.x + bb.w) {
+            this.boss.absorbLaser(this.px);
+          }
+        }
+        // Emit a tiny spark at the contact point when the beam is
+        // vaporizing against a bunker, so the player sees *why* the
+        // beam got shorter.
+        if (stopY > 40 && (this.laserT & 3) === 0) {
+          for (let k = 0; k < 2; k++) {
+            const a = -Math.PI / 2 + rand(-1.0, 1.0);
+            const sp = rand(1.2, 2.4);
+            PARTS.push(new Particle(
+              this.px + rand(-4, 4), stopY + 2,
+              css('--accent-3'),
+              Math.cos(a) * sp, Math.sin(a) * sp,
+              rand(6, 10), 2
+            ));
+          }
+        }
+        updateHUD();
+      }
+    }
+
+    // player bullets — NO FRIENDLY FIRE; evaporate on bunker contact
+    this.pBullets = this.pBullets.filter(b => {
+      b.x += b.vx; b.y += b.vy;
+      if (b.y < -10) return false;
+
+      // Boss hit (boss levels only)
+      if (this.boss && this.boss.alive) {
+        const bb = this.boss.bounds();
+        if (b.x > bb.x && b.x < bb.x + bb.w &&
+            b.y > bb.y && b.y < bb.y + bb.h) {
+          this.boss.hit();
+          this.score += 10;
+          // small particle feedback
+          for (let i = 0; i < 5; i++) {
+            const a = rand(0, Math.PI * 2), sp = rand(1.2, 2.4);
+            PARTS.push(new Particle(b.x, b.y, css('--accent-hot'),
+              Math.cos(a)*sp, Math.sin(a)*sp, rand(10, 16), rand(1.5, 2.5)));
+          }
+          updateHUD();
+          return false;
+        }
+      }
+
+      // UFO hit
+      if (this.ufo.active) {
+        const ub = this.ufo.bounds();
+        if (b.x > ub.x && b.x < ub.x + ub.w && b.y > ub.y && b.y < ub.y + ub.h) {
+          this.score += this.ufo.pts;
+          explode(this.ufo.x, this.ufo.y, css('--accent-hot'), 35);
+          this.ufo.active = false; sfx.edie(); sfx.bonus();
+          updateHUD();
+          return false;
+        }
+      }
+
+      // Enemy hit
+      for (const e of this.enemies) {
+        if (!e.alive) continue;
+        const ex = e.x - e.sz*4, ey = e.y - e.sz*4, ew = e.sz*8, eh = e.sz*8;
+        if (b.x > ex && b.x < ex + ew && b.y > ey && b.y < ey + eh) {
+          e.hp--; e.ft = 6;
+          if (e.hp <= 0) {
+            e.alive = false;
+            this.score += e.pts;
+            explode(e.x, e.y, css(e.col), 18);
+            sfx.edie();
+          }
+          updateHUD();
+          return false;
+        }
+      }
+
+      // Bunker contact: the bullet just evaporates, the bunker is unharmed.
+      for (const bk of this.bunkers) {
+        if (bk.overlaps(b.x, b.y)) {
+          // tiny puff so it doesn't feel like the bullet vanished
+          for (let i = 0; i < 4; i++) {
+            const a = rand(0, Math.PI * 2), sp = rand(0.6, 1.8);
+            PARTS.push(new Particle(b.x, b.y, css('--accent-2'),
+              Math.cos(a)*sp, Math.sin(a)*sp, rand(8, 14), rand(1.5, 2.5)));
+          }
+          return false;
+        }
+      }
+      return true;
+    });
+
+    // ---------- Boss path ----------
+    // On boss levels the grid is empty; the boss is the only threat.
+    // When boss dies we trigger the same wave-clear → upgrade flow.
+    if (this.boss) {
+      this.boss.update(this);
+      if (!this.boss.alive) {
+        // big payoff for beating a boss
+        this.score += 500 * this.boss.tier;
+        explode(this.boss.x, this.boss.y, css('--accent-hot'), 60);
+        explode(this.boss.x - 20, this.boss.y + 10, css('--accent-2'), 30);
+        explode(this.boss.x + 20, this.boss.y - 10, css('--accent-3'), 30);
+        this.boss = null;
+        this.laserOn = false; this.laserT = 0; this.laserCD = 0;
+        this.pBullets = []; this.eBullets = [];
+        this.opts = this.getOpts();
+        this.state = 'upgrade';
+        sfx.lvlup();
+        populateUpgradeUI(this.opts, this.pLv);
+        showOverlay('upgradeScreen');
+        updateHUD();
+        return;
+      }
+    } else {
+
+    // enemy grid movement — single pass over the full enemy array
+    this.eFT++;
+    const enemies = this.enemies;
+    const total   = enemies.length;
+    let aliveCount = 0;
+    let minX = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (let i = 0; i < total; i++) {
+      const e = enemies[i];
+      if (!e.alive) continue;
+      aliveCount++;
+      if (e.x < minX) minX = e.x;
+      if (e.x > maxX) maxX = e.x;
+      if (e.y > maxY) maxY = e.y;
+    }
+
+    if (aliveCount === 0) {
+      // wave clear — kill any in-flight laser / bullets so nothing bleeds into next level
+      this.laserOn = false;
+      this.laserT = 0;
+      this.laserCD = 0;
+      this.pBullets = [];
+      this.eBullets = [];
+      this.opts = this.getOpts();
+      this.state = 'upgrade';
+      sfx.lvlup();
+      populateUpgradeUI(this.opts, this.pLv);
+      showOverlay('upgradeScreen');
+      return;
+    }
+
+    // Gentler "last-stand" acceleration. Old multiplier 1.8 made the final
+    // 2-3 enemies blitz across the screen; 1.0 keeps it noticeable but
+    // survivable. Also scaled a touch by level so late levels still press.
+    const speedupMul = 0.9 + Math.min(this.level, 15) * 0.04; // L1≈0.94 .. L15≈1.5
+    const speedup = 1 + (1 - aliveCount / total) * speedupMul;
+    const spd = this.eSpd * speedup;
+    if (this.eFT >= 3) { this.eFT = 0; this.eFrame = (this.eFrame + 1) % 2; }
+
+    const flip = maxX > W - 28 || minX < 28;
+    if (flip) this.eDir *= -1;
+    const step = spd * this.eDir;
+    // Smaller descent step (old 18px → 14px). Saves players ~4 more bounces
+    // before the formation reaches the player, which is exactly the "too
+    // fast downward" complaint.
+    const dy = 14;
+    for (let i = 0; i < total; i++) {
+      const e = enemies[i];
+      if (!e.alive) continue;
+      e.x += step;
+      if (e.ft > 0) e.ft--;
+      if (flip) e.y += dy;
+    }
+
+    // enemies reach player zone
+    if (maxY > H - 72) { this._killPlayer(true); }
+
+    // enemy shooting — pick the Nth alive enemy without allocating an array
+    this.eST++;
+    if (this.eST >= this.eSI) {
+      this.eST = 0;
+      let pick = Math.floor(Math.random() * aliveCount);
+      let shooter = null;
+      for (let i = 0; i < total; i++) {
+        const e = enemies[i];
+        if (!e.alive) continue;
+        if (pick-- === 0) { shooter = e; break; }
+      }
+      if (shooter) {
+        sfx.eshoot();
+        const baseSpeed = 3.5 + this.level * 0.22;
+        const sx = shooter.x;
+        const sy = shooter.y + shooter.sz*8;
+
+        if (shooter.volley) {
+          // Volleyers (L26+): fire a 3-bullet fan instead of a single
+          // bullet, roughly 30° apart. No zigzag — the spread itself is
+          // the threat.
+          const angles = [-0.30, 0, 0.30];  // radians off straight-down
+          for (const ang of angles) {
+            this.eBullets.push({
+              x: sx, y: sy, col: shooter.col,
+              vx: Math.sin(ang) * baseSpeed,
+              vy: Math.cos(ang) * baseSpeed,
+              zigzag: false, t: 0,
+            });
+          }
+        } else if (shooter.seeker) {
+          // Seekers aim their single shot directly at the player.
+          const dx = this.px - sx;
+          const dy2 = this.py - sy;
+          const L  = Math.max(1, Math.sqrt(dx * dx + dy2 * dy2));
+          this.eBullets.push({
+            x: sx, y: sy, col: shooter.col,
+            vx: (dx / L) * baseSpeed,
+            vy: (dy2 / L) * baseSpeed,
+            zigzag: false, t: 0,
+          });
+        } else {
+          const zigzag = Math.random() < 0.18;
+          this.eBullets.push({
+            x: sx, y: sy, col: shooter.col,
+            vx: 0, vy: baseSpeed, zigzag, t: 0,
+          });
+        }
+      }
+    }
+    } // end non-boss branch
+
+    // enemy bullets
+    this.eBullets = this.eBullets.filter(b => {
+      b.t++;
+      if (b.zigzag) b.vx = Math.sin(b.t * 0.28) * 2.2;
+      b.x += b.vx; b.y += b.vy;
+      if (b.y > H) return false;
+      for (const bk of this.bunkers) { if (bk.chip(b.x, b.y)) return false; }
+      if (Math.abs(b.x - this.px) < this.pw/2 + 2 && Math.abs(b.y - this.py) < this.ph/2 + 2) {
+        this._killPlayer(); return false;
+      }
+      return true;
+    });
+
+    this.ufo.update();
+    PARTS = PARTS.filter(p => p.tick());
+  }
+
+  _killPlayer(forced = false) {
+    if (this.dying) return;
+    if (this.shieldHp > 0 && !forced) {
+      this.shieldHp--; this.shieldFlash = 45; sfx.shield();
+      updateHUD();
+      return;
+    }
+    this.lives--;
+    explode(this.px, this.py, css('--accent-hot'), 38);
+    sfx.pdie();
+    this.dying = true; this.dyT = 0; this.flash = 30;
+    updateHUD();
+  }
+
+  // ------- Draw -------
+  draw() {
+    ctx.fillStyle = css('--bg-alt');
+    ctx.fillRect(0, 0, W, H);
+
+    drawStars();
+
+    // grid lines
+    ctx.strokeStyle = css('--grid-line');
+    ctx.lineWidth = 1;
+    for (let x = 0; x < W; x += 60) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+    for (let y = 0; y < H; y += 60) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+
+    if (this.state === 'menu' || this.state === 'gameover') {
+      // idle star field only; DOM overlay shows the actual content
+      PARTS.forEach(p => p.draw());
+      return;
+    }
+
+    this.bunkers.forEach(b => b.draw());
+
+    // enemies — blit cached sprite canvases instead of per-pixel draws
+    for (let i = 0; i < this.enemies.length; i++) {
+      const e = this.enemies[i];
+      if (!e.alive) continue;
+      const sp      = this.eFrame === 0 ? e.spA : e.spB;
+      const colorVar = e.ft > 0 ? '--ball' : e.col;
+      drawSprite(sp, e.x - e.sz*4, e.y - e.sz*4, e.sz, colorVar);
+      // HP ticks for multi-HP enemy types. Color matches the enemy's
+      // palette so a quick glance tells you which one has how many pips
+      // left.
+      if (e.hp > 1 &&
+          (e.type === 'tank' || e.type === 'brute' ||
+           e.type === 'juggernaut' || e.type === 'ward' ||
+           e.type === 'volleyer')) {
+        ctx.fillStyle = css(e.col);
+        // Juggernauts have up to 10 HP — showing 10 pips wastes screen
+        // real estate, so group into 5 double-wide pips past 5 HP.
+        if (e.type === 'juggernaut' && e.hp > 5) {
+          for (let h = 0; h < 5; h++) {
+            ctx.fillRect(e.x - e.sz*4 + h*7, e.y - e.sz*4 - 10, 5, 3);
+          }
+          // second row for hp 6-10
+          for (let h = 0; h < e.hp - 5; h++) {
+            ctx.fillRect(e.x - e.sz*4 + h*7, e.y - e.sz*4 - 6, 5, 3);
+          }
+        } else {
+          for (let h = 0; h < e.hp; h++) {
+            ctx.fillRect(e.x - e.sz*4 + h*7, e.y - e.sz*4 - 6, 5, 3);
+          }
+        }
+      }
+      // Ward: subtle cyan aura so laser-immunity is visually obvious.
+      if (e.type === 'ward') {
+        ctx.save();
+        ctx.globalAlpha = 0.35 + Math.sin((e.ft || 0) * 0.4 + e.x * 0.02) * 0.1;
+        ctx.strokeStyle = css('--accent-2');
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, e.sz*4 + 4, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+      // Volleyer: faint green aura so the 3-bullet threat is legible
+      // at a glance. Flickers slightly on each shot cycle.
+      if (e.type === 'volleyer') {
+        ctx.save();
+        ctx.globalAlpha = 0.3 + Math.abs(Math.sin(this.eST * 0.04 + e.x * 0.03)) * 0.25;
+        ctx.strokeStyle = css('--accent-grn');
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, e.sz*4 + 3, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    this.ufo.draw();
+
+    // boss (if active)
+    if (this.boss) this.boss.draw();
+
+    // player bullets
+    this.pBullets.forEach(b => {
+      ctx.shadowColor = css('--accent-2'); ctx.shadowBlur = 9;
+      ctx.fillStyle = css('--accent-2');
+      ctx.fillRect(b.x - 2, b.y - 7, 4, 14);
+      ctx.shadowBlur = 0;
+    });
+
+    // enemy bullets
+    this.eBullets.forEach(b => {
+      const c = css(b.col);
+      ctx.shadowColor = c; ctx.shadowBlur = 8;
+      ctx.fillStyle = c;
+      if (b.zigzag) {
+        ctx.fillRect(b.x - 3, b.y - 4, 6, 4);
+        ctx.fillRect(b.x - 1, b.y + 1, 3, 4);
+      } else {
+        ctx.fillRect(b.x - 2, b.y - 7, 4, 14);
+      }
+      ctx.shadowBlur = 0;
+    });
+
+    // laser beam
+    if (this.laserOn) {
+      // Fade the beam as it expires; normalize against the per-level
+      // fire duration (laserTMax). clamp to [0, 1] so partial upgrades
+      // don't render oddly.
+      const a = Math.max(0, Math.min(1, this.laserT / Math.max(1, this.laserTMax)));
+      const bw = 10 + Math.sin(this.laserT * 0.6) * 4;
+      const c = css('--accent-3');
+      // Clip the beam to the bunker block point so visually it vaporizes
+      // at the wall instead of pretending to pass through.
+      const stopY = this.computeLaserStop();
+      const beamTop = stopY;
+      const beamH = Math.max(0, this.py - beamTop);
+      ctx.globalAlpha = a;
+      ctx.shadowColor = c; ctx.shadowBlur = 25;
+      ctx.fillStyle = 'rgba(179,136,255,0.35)';
+      ctx.fillRect(this.px - bw/2, beamTop, bw, beamH);
+      ctx.fillStyle = css('--ball');
+      ctx.fillRect(this.px - 2, beamTop, 4, beamH);
+      ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+    }
+
+    // player
+    if (!this.dying || (this.dyT % 7 < 4)) this._drawPlayer();
+
+    // shield
+    if (this.shieldHp > 0 || this.shieldFlash > 0) {
+      const a = this.shieldFlash > 0 ? 0.55 + Math.sin(this.shieldFlash*0.4)*0.35 : 0.22;
+      ctx.globalAlpha = a;
+      ctx.strokeStyle = css('--accent-2'); ctx.lineWidth = 2;
+      ctx.shadowColor = css('--accent-2'); ctx.shadowBlur = 18;
+      ctx.beginPath();
+      ctx.ellipse(this.px, this.py, this.pw*0.9, this.ph*1.8, 0, 0, Math.PI*2);
+      ctx.stroke();
+      ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+    }
+
+    PARTS.forEach(p => p.draw());
+
+    // red damage flash
+    if (this.flash > 0) {
+      ctx.fillStyle = `rgba(255, 60, 100, ${this.flash/60 * 0.3})`;
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    // dying message
+    if (this.dying && this.dyT > 35) {
+      ctx.fillStyle = css('--accent-hot');
+      ctx.shadowColor = css('--accent-hot'); ctx.shadowBlur = 18;
+      ctx.font = '18px "Press Start 2P"';
+      ctx.textAlign = 'center';
+      ctx.fillText(this.lives > 0 ? 'HULL BREACHED' : 'SIGNAL LOST', W/2, H/2);
+      ctx.shadowBlur = 0;
+    }
+
+    // scanlines on canvas
+    ctx.fillStyle = 'rgba(0,0,0,0.05)';
+    for (let y = 0; y < H; y += 3) ctx.fillRect(0, y, W, 1);
+  }
+
+  _drawPlayer() {
+    const x = this.px, y = this.py;
+    const body = css('--ball');   // white in dark theme, paper in light theme
+    const outline = css('--text');
+    const cockpit = css('--accent-2');
+
+    // drop shadow offset
+    ctx.fillStyle = outline;
+    ctx.globalAlpha = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(x + 3,        y - this.ph/2 - 4);
+    ctx.lineTo(x + 3 + this.pw/2, y + 3 + this.ph/2);
+    ctx.lineTo(x + 3 - this.pw/2, y + 3 + this.ph/2);
+    ctx.closePath(); ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // ship body (arrowhead fighter)
+    ctx.fillStyle = body;
+    ctx.beginPath();
+    ctx.moveTo(x,                 y - this.ph/2 - 4);
+    ctx.lineTo(x + this.pw/2,     y + this.ph/2);
+    ctx.lineTo(x + this.pw/4,     y + this.ph/2 - 6);
+    ctx.lineTo(x,                 y + this.ph/2 - 2);
+    ctx.lineTo(x - this.pw/4,     y + this.ph/2 - 6);
+    ctx.lineTo(x - this.pw/2,     y + this.ph/2);
+    ctx.closePath();
+    ctx.fill();
+
+    // outline
+    ctx.strokeStyle = outline;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // cockpit
+    ctx.fillStyle = cockpit;
+    ctx.beginPath();
+    ctx.arc(x, y - 2, 4, 0, Math.PI*2);
+    ctx.fill();
+    ctx.strokeStyle = outline;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // engine trails (pointing down, safely below ship & well clear of bunkers)
+    const flame = css('--accent-2');
+    const grad = ctx.createLinearGradient(x, y + this.ph/2, x, y + this.ph/2 + 14);
+    grad.addColorStop(0, flame);
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(x - 6, y + this.ph/2, 4, 8 + Math.random()*6);
+    ctx.fillRect(x + 2, y + this.ph/2, 4, 8 + Math.random()*6);
+  }
+}
+
+// ---------- Overlays ----------
+const { show: showOverlay, hideAll: hideAllOverlays } = createOverlayManager(
+  ['startScreen', 'pauseScreen', 'gameoverScreen', 'upgradeScreen']
+);
+
+function populateUpgradeUI(opts, pLv) {
+  const grid = document.getElementById('perkGrid');
+  grid.innerHTML = '';
+  opts.forEach((entry, i) => {
+    const def       = entry.def;
+    const lv        = pLv[def.id];
+    const isMaxed   = entry.maxed;
+    // "Blocked" = not maxed but the gap rule forbids upgrading now.
+    const isBlocked = !isMaxed && !entry.canPick;
+    const nextLv    = isMaxed ? lv : (lv + 1);
+
+    const card = document.createElement('button');
+    card.className = 'perk-card' + (isMaxed || isBlocked ? ' disabled' : '');
+    card.style.borderColor = def.color();
+    card.disabled = isMaxed || isBlocked;
+    if (!card.disabled) {
+      card.addEventListener('click', () => { initAudio(); G.pick(i); });
+    }
+
+    let pips = '';
+    const litUpTo = isMaxed ? lv : nextLv;
+    for (let p = 0; p < def.maxLv; p++)
+      pips += `<span class="perk-pip ${p < litUpTo ? 'on' : ''}" style="${p < litUpTo ? `background:${def.color()}` : ''}"></span>`;
+
+    let status = '';
+    if (isMaxed) {
+      status = `<div class="perk-status maxed">MAX</div>`;
+    } else if (isBlocked) {
+      status = `<div class="perk-status locked">LOCKED</div>`;
+    }
+
+    // Description changes based on state:
+    //   - maxed:   show current effect (lv), not a hypothetical upgrade
+    //   - blocked: explain the gap rule so the player isn't confused
+    //   - normal:  preview of next-level effect
+    let descText;
+    if (isMaxed) {
+      descText = def.desc(Math.max(1, lv)) + ' \u2022 maxed out';
+    } else if (isBlocked) {
+      descText = 'Level up lower-tier perks first (max 2-level gap)';
+    } else {
+      descText = def.desc(nextLv);
+    }
+
+    const lvLabel = isMaxed
+      ? `LV ${lv} (MAX)`
+      : `LV ${lv} \u2192 ${nextLv}`;
+
+    card.innerHTML = `
+      ${status}
+      <div class="perk-key">[${i + 1}]</div>
+      <div class="perk-icon" style="color:${def.color()}">${def.icon}</div>
+      <div class="perk-name" style="color:${def.color()}">${def.name}</div>
+      <div class="perk-lv">${lvLabel}</div>
+      <div class="perk-desc">${descText}</div>
+      <div class="perk-pips">${pips}</div>
+    `;
+    grid.appendChild(card);
+  });
+}
+
+// ---------- HUD ----------
+function updateHUD() {
+  document.getElementById('hudScore').textContent = pad(G.score, 6);
+  document.getElementById('hudLevel').textContent = pad(G.level, 2);
+  document.getElementById('hudBest').textContent  = pad(G.hs, 6);
+  document.getElementById('hudLives').textContent = '♥'.repeat(Math.max(0, G.lives)) || '—';
+
+  const stack = document.getElementById('perkStack');
+  stack.innerHTML = '';
+  PERKS.forEach(p => {
+    const lv = G.pLv[p.id];
+    if (lv > 0) {
+      const d = document.createElement('div');
+      d.className = 'pu-badge active';
+      d.innerHTML = `${p.icon}<span class="lv">${lv}</span>`;
+      stack.appendChild(d);
+    }
+  });
+  // shield HP readout
+  if (G.pLv.shield > 0) {
+    const d = document.createElement('div');
+    d.className = 'pu-badge';
+    d.style.color = css('--accent-2');
+    d.innerHTML = `◈<span class="lv">${G.shieldHp}/${G.pLv.shield}</span>`;
+    stack.appendChild(d);
+  }
+  // laser charge readout
+  if (G.laserMax > 0) {
+    const pct = Math.floor((1 - G.laserCD / G.laserMax) * 100);
+    const d = document.createElement('div');
+    d.className = 'pu-badge' + (pct >= 100 ? ' active' : '');
+    d.innerHTML = `⚡<span class="lv">${pct}%</span>`;
+    stack.appendChild(d);
+  }
+}
+
+// ---------- Init ----------
+const G = new Game();
+updateHUD();
+showOverlay('startScreen');
+
+// keyboard
+window.addEventListener('keydown', e => {
+  if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Space'].includes(e.code)) e.preventDefault();
+  G.key(e, true);
+});
+window.addEventListener('keyup', e => G.key(e, false));
+
+// Menu button
+document.getElementById('startBtn').addEventListener('click', () => {
+  initAudio();
+  G._reset();
+  G.state = 'playing';
+  G.setupLevel();
+  hideAllOverlays();
+  updateHUD();
+});
+document.getElementById('retryBtn').addEventListener('click', () => {
+  initAudio();
+  G._reset();
+  G.state = 'playing';
+  G.setupLevel();
+  hideAllOverlays();
+  updateHUD();
+});
+document.getElementById('resumeBtn').addEventListener('click', () => {
+  G.state = 'playing'; hideAllOverlays();
+});
+document.getElementById('restartBtnPause').addEventListener('click', () => {
+  G._reset(); G.state = 'playing'; G.setupLevel(); hideAllOverlays(); updateHUD();
+});
+
+// Mouse fire / tap-to-start on canvas
+cvs.addEventListener('click', () => {
+  initAudio();
+  if (G.state === 'playing' && !G.dying) G.shoot();
+});
+
+// Touch controls
+document.getElementById('tLeft').addEventListener('touchstart',  e => { e.preventDefault(); G.touchDir = -1; initAudio(); });
+document.getElementById('tLeft').addEventListener('touchend',    e => { e.preventDefault(); G.touchDir = 0; });
+document.getElementById('tRight').addEventListener('touchstart', e => { e.preventDefault(); G.touchDir = 1;  initAudio(); });
+document.getElementById('tRight').addEventListener('touchend',   e => { e.preventDefault(); G.touchDir = 0; });
+document.getElementById('tFire').addEventListener('touchstart',  e => {
+  e.preventDefault(); initAudio();
+  if (G.state === 'playing' && !G.dying) G.shoot();
+});
+document.getElementById('tLaser').addEventListener('touchstart', e => {
+  e.preventDefault(); initAudio();
+  if (G.state === 'playing' && !G.dying) G.fireLaser();
+});
+
+// ---------- Canvas sizing ----------
+fitCanvas(cvs, '.stage');
+
+// ---------- Loop ----------
+function loop() {
+  G.update();
+  G.draw();
+  if (G.state === 'playing' || G.state === 'paused') updateHUD();
+  requestAnimationFrame(loop);
+}
+loop();
+
+})();
+</script>
+
+</body>
+</html>

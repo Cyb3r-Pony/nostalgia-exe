@@ -1,0 +1,1269 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>VAPOR VALLEY — Nostalgia.exe</title>
+<link rel="icon" type="image/svg+xml" href="../favicon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=Press+Start+2P&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="shared/arcade.css" />
+<style>
+  /* ==========================================================
+     VAPOR VALLEY — game-specific overrides.
+     Shared chrome comes from shared/arcade.css.
+     ========================================================== */
+  :root {
+    --p0: #00e5ff; /* user — cyan */
+    --p1: #ff4fa1;
+    --p2: #b388ff;
+    --p3: #ffd866;
+    --p4: #7df98a;
+    --p5: #ff8a4c;
+    --p6: #4ea5ff;
+    --p7: #ff5bc4;
+    --p8: #f5e76f;
+    --p9: #a0ff5b;
+    --wall: #3a3a52;
+  }
+  [data-theme="light"] {
+    --p0: #4ab8c8;
+    --p1: #ff7aa8;
+    --p2: #8c7bd6;
+    --p3: #e5c050;
+    --p4: #6bc77d;
+    --p5: #ff9f6b;
+    --p6: #5a9cff;
+    --p7: #e57ec2;
+    --p8: #c8a030;
+    --p9: #78b540;
+    --wall: #8a8088;
+  }
+
+  /* Keep the canvas a perfect square */
+  canvas {
+    max-width: 100%;
+    max-height: 100%;
+  }
+
+  /* Leaderboard floats to the side of the stage */
+  .leaderboard {
+    position: fixed;
+    top: 120px;
+    right: 16px;
+    width: 180px;
+    z-index: 40;
+    background: color-mix(in srgb, var(--panel) 90%, transparent);
+    border: 1px solid var(--text);
+    box-shadow: 4px 4px 0 var(--accent-2);
+    font-size: 10px;
+    letter-spacing: 1px;
+    max-height: calc(100vh - 200px);
+    overflow: hidden;
+  }
+  .leaderboard .lb-head {
+    background: var(--panel-2);
+    padding: 6px 10px;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 9px;
+    color: var(--accent-2);
+    border-bottom: 1px solid var(--text);
+  }
+  .leaderboard .lb-body { padding: 6px 8px; display: flex; flex-direction: column; gap: 3px; }
+  .lb-row {
+    display: grid;
+    grid-template-columns: 10px 1fr auto;
+    gap: 8px;
+    align-items: center;
+    padding: 3px 4px;
+    font-size: 10px;
+    color: var(--text);
+  }
+  .lb-row.dead {
+    opacity: 0.4;
+    text-decoration: line-through;
+  }
+  .lb-row.you { background: color-mix(in srgb, var(--accent-2) 15%, transparent); }
+  .lb-dot { width: 10px; height: 10px; display: inline-block; border: 1px solid var(--text); }
+  .lb-name { letter-spacing: 1px; font-family: 'JetBrains Mono', monospace; }
+  .lb-pct { font-family: 'Press Start 2P', monospace; font-size: 8px; color: var(--text-dim); }
+
+  /* Map picker on menu */
+  .map-picker {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin: 18px 0 22px;
+  }
+  .map-card {
+    background: var(--panel-2);
+    border: 2px solid var(--text);
+    padding: 14px 10px;
+    cursor: pointer;
+    color: var(--text);
+    text-align: center;
+    transition: transform 0.15s, box-shadow 0.15s;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .map-card:hover {
+    transform: translate(-1px,-1px);
+    box-shadow: 3px 3px 0 var(--accent-2);
+  }
+  .map-card.selected {
+    background: color-mix(in srgb, var(--accent-2) 25%, var(--panel-2));
+    box-shadow: 4px 4px 0 var(--accent-hot);
+  }
+  .map-card .m-name {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 11px;
+    color: var(--accent-2);
+    margin-bottom: 6px;
+    letter-spacing: 1px;
+  }
+  .map-card .m-size {
+    font-size: 9px;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+    letter-spacing: 1px;
+  }
+  .map-card .m-hint {
+    font-size: 10px;
+    color: var(--text);
+    line-height: 1.4;
+  }
+
+  /* Touch — 4-direction D-pad for this game */
+  .touch {
+    display: none;
+    justify-content: center;
+    align-items: center;
+    gap: 6px;
+    pointer-events: none;
+  }
+  .touch .dpad {
+    pointer-events: auto;
+    display: grid;
+    grid-template-columns: 68px 68px 68px;
+    grid-template-rows: 68px 68px 68px;
+    gap: 4px;
+  }
+  .touch .dpad button {
+    width: 68px; height: 68px;
+    border: 2px solid var(--text);
+    background: color-mix(in srgb, var(--panel) 80%, transparent);
+    color: var(--accent-2);
+    font-family: 'Press Start 2P', monospace;
+    font-size: 18px;
+    cursor: pointer;
+    box-shadow: 4px 4px 0 var(--text);
+  }
+  .touch .dpad .tUp    { grid-column: 2; grid-row: 1; }
+  .touch .dpad .tLeft  { grid-column: 1; grid-row: 2; }
+  .touch .dpad .tRight { grid-column: 3; grid-row: 2; }
+  .touch .dpad .tDown  { grid-column: 2; grid-row: 3; }
+
+  @media (max-width: 780px) {
+    .leaderboard { display: none; }
+    .map-picker { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="bg-grid"></div>
+<div class="scanlines"></div>
+
+<header class="topbar">
+  <a href="../index.html" class="back">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    EXIT
+  </a>
+  <div class="title-tag">VAPOR VALLEY<span class="ver">v1.0.0 // 1993.EXE</span></div>
+  <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme"></button>
+</header>
+
+<section class="hud" id="hud">
+  <div class="hud-col">
+    <div class="hud-stat score">TERRITORY<strong id="territoryPct">0.0%</strong></div>
+    <div class="hud-stat">ALIVE<strong id="aliveCount">—</strong></div>
+  </div>
+  <div class="hud-col">
+    <div class="hud-stat">MAP<strong id="mapName">—</strong></div>
+    <div class="hud-stat best">BEST<strong id="bestPct">0.0%</strong></div>
+  </div>
+</section>
+
+<div class="stage">
+  <canvas id="game" width="720" height="720"></canvas>
+</div>
+
+<aside class="leaderboard" id="leaderboard">
+  <div class="lb-head">LEADERBOARD</div>
+  <div class="lb-body" id="leaderboardBody"></div>
+</aside>
+
+<footer class="bottombar">
+  <div class="keys">
+    <span><kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> MOVE</span>
+    <span><kbd>P</kbd> PAUSE</span>
+    <span><kbd>M</kbd> MUTE</span>
+    <span><kbd>R</kbd> RESTART</span>
+  </div>
+  <div>© NOSTALGIA.EXE — <span class="blink">█</span></div>
+</footer>
+
+<div class="touch" id="touch">
+  <div class="dpad">
+    <button class="tUp"    id="tUp"    aria-label="Up">▲</button>
+    <button class="tLeft"  id="tLeft"  aria-label="Left">◀</button>
+    <button class="tRight" id="tRight" aria-label="Right">▶</button>
+    <button class="tDown"  id="tDown"  aria-label="Down">▼</button>
+  </div>
+</div>
+
+<!-- Start menu -->
+<div class="overlay" id="startScreen">
+  <div class="card wide">
+    <div class="card-head">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span>vapor_valley.app</span>
+      <span>_ □ ×</span>
+    </div>
+    <h1>VAPOR VALLEY</h1>
+    <p>
+      Leave your base, carve a loop, seal your claim. Touch a rival's trail — they shatter.
+      Touch your own — you do. Claim the valley.
+    </p>
+
+    <div class="map-picker" id="mapPicker">
+      <button class="map-card selected" data-map="compact">
+        <div class="m-name">COMPACT</div>
+        <div class="m-size">40 × 40 · 4 souls</div>
+        <div class="m-hint">Tight quarters. Every turn is a risk.</div>
+      </button>
+      <button class="map-card" data-map="plains">
+        <div class="m-name">PLAINS</div>
+        <div class="m-size">60 × 60 · 6 souls</div>
+        <div class="m-hint">Wide open expanse. Room to breathe.</div>
+      </button>
+      <button class="map-card" data-map="grand">
+        <div class="m-name">GRAND</div>
+        <div class="m-size">72 × 72 · 10 souls</div>
+        <div class="m-hint">A sprawling arena. Long campaigns.</div>
+      </button>
+    </div>
+
+    <button class="btn" id="startBtn">▶ START GAME</button>
+    <button class="btn ghost" id="muteBtnMenu">♪ SOUND ON</button>
+  </div>
+</div>
+
+<!-- Pause -->
+<div class="overlay hidden" id="pauseScreen">
+  <div class="card">
+    <div class="card-head">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span>pause.sys</span>
+      <span>_ □ ×</span>
+    </div>
+    <h2>PAUSED</h2>
+    <p>Valley frozen. Your loop waits.</p>
+    <button class="btn" id="resumeBtn">▶ RESUME</button>
+    <button class="btn ghost" id="restartBtnPause">↻ RESTART</button>
+  </div>
+</div>
+
+<!-- Game over -->
+<div class="overlay hidden" id="gameoverScreen">
+  <div class="card">
+    <div class="card-head">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span>run.log</span>
+      <span>_ □ ×</span>
+    </div>
+    <h2 id="endTitle" style="color:var(--accent-hot)">DISSOLVED</h2>
+    <p id="endBlurb">Your signal fades into the vapor.</p>
+    <div class="stat-row">
+      <div>TERRITORY<strong id="finalPct">0.0%</strong></div>
+      <div>TIME<strong id="finalTime">0s</strong></div>
+      <div>MAP<strong id="finalMap">—</strong></div>
+    </div>
+    <p id="scoreStatus" class="score-status" data-state="idle"></p>
+    <button class="btn" id="retryBtn">↻ RETRY</button>
+    <button class="btn ghost" id="menuBtn">◀ MAIN MENU</button>
+  </div>
+</div>
+
+<!-- Public scoreboard plumbing -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.105.1"></script>
+<script src="../shared/supabase-config.js"></script>
+<script src="../shared/auth.js"></script>
+<script src="../shared/scores.js"></script>
+
+<script src="shared/arcade.js"></script>
+<script>
+/* =============================================================
+   VAPOR VALLEY — retro-futuristic territory control.
+   Uses the shared Arcade runtime (games/shared/arcade.js).
+   ============================================================= */
+(() => {
+'use strict';
+
+const cvs = document.getElementById('game');
+const ctx = cvs.getContext('2d');
+const W = cvs.width, H = cvs.height;
+
+// ---------- Shared Arcade runtime ----------
+const { clamp, rand, randInt, pad, color,
+        createAudio, createOverlayManager,
+        wireThemeToggle, fitCanvas } = Arcade;
+const css = color;
+
+wireThemeToggle('themeToggle');
+fitCanvas(cvs, '.stage');
+
+// ---------- Audio ----------
+const audio     = createAudio('vv.muted');
+const initAudio = audio.init;
+const beep      = audio.beep;
+const noise     = audio.noise;
+
+const sfx = {
+  turn:     () => beep(520, 0.02, 'square',   0.05),
+  capture:  () => { [480, 640, 820, 1040].forEach((f,i) => setTimeout(() => beep(f, 0.07, 'square', 0.10), i*45)); },
+  death:    () => { beep(260, 0.1, 'sawtooth', 0.15, 80); setTimeout(() => noise(0.12, 0.10), 80); },
+  botDeath: () => beep(340, 0.08, 'sawtooth', 0.08, 120),
+  spawn:    () => beep(700, 0.06, 'triangle', 0.10, 420),
+  gameover: () => { [400, 300, 200, 100].forEach((f,i) => setTimeout(() => beep(f, 0.15, 'sawtooth', 0.12), i*120)); },
+};
+
+const muteBtnMenu = document.getElementById('muteBtnMenu');
+function updateMuteLabel() { muteBtnMenu.textContent = audio.muted ? '♪ SOUND OFF' : '♪ SOUND ON'; }
+updateMuteLabel();
+muteBtnMenu.addEventListener('click', () => { audio.toggle(); updateMuteLabel(); });
+
+// ---------- Overlays ----------
+const { show: showOverlay, hideAll: hideAllOverlays } = createOverlayManager([
+  'startScreen', 'pauseScreen', 'gameoverScreen'
+]);
+
+// ---------- Constants ----------
+const EMPTY = -1;
+const WALL  = 99;
+const DX = { up: 0, down: 0, left: -1, right: 1 };
+const DY = { up: -1, down: 1, left: 0, right: 0 };
+const DIRS = ['up', 'down', 'left', 'right'];
+const OPPOSITE = { up: 'down', down: 'up', left: 'right', right: 'left' };
+
+const PLAYER_COLORS = ['--p0','--p1','--p2','--p3','--p4','--p5','--p6','--p7','--p8','--p9'];
+const BOT_NAMES     = ['NYX','KAI','ORB','VEX','ZOE','PAX','DEX','REN','SOL'];
+
+// ---------- Maps ----------
+// `players`   — starting alive count (user + bots).
+// `baseFloor` — keep this many alive until user territory % exceeds `floorPct`.
+// `softFloor` / `softPct` — intermediate floor that drops once user crosses softPct.
+const MAPS = {
+  compact: { key: 'compact', name: 'COMPACT', w: 40, h: 40, players: 4,  walls: [], baseFloor: 2, floorPct: 80 },
+  plains:  { key: 'plains',  name: 'PLAINS',  w: 60, h: 60, players: 6,  walls: [], baseFloor: 2, floorPct: 80 },
+  grand:   { key: 'grand',   name: 'GRAND',   w: 72, h: 72, players: 10, walls: [], baseFloor: 4, floorPct: 60, softFloor: 2, softPct: 80 },
+};
+
+// ---------- State ----------
+const state = {
+  mode: 'menu',  // menu | playing | paused | gameover
+  map: null,
+  grid: null,     // Int8Array per cell: -1 empty, 0..9 owner, 99 wall
+  trail: null,    // Int8Array per cell: -1 no trail, 0..9 trail owner
+  players: [],
+  particles: [],
+  botsKilled: 0,
+  elapsed: 0,
+  bestPct: +(localStorage.getItem('vv.best') || 0),
+  selectedMap: 'compact',
+  lastWinner: null,
+  // Cached per-player territory counts, refreshed each HUD tick
+  counts: new Int32Array(10),
+  totalLiveCells: 1,
+};
+
+// Offscreen canvas for territory — avoids 3000+ fillRect per frame
+const territoryCanvas = document.createElement('canvas');
+territoryCanvas.width = W;
+territoryCanvas.height = H;
+const tctx = territoryCanvas.getContext('2d');
+let territoryDirty = true;
+let CELL = 12;
+
+// Pending kill queue (collected during advance, applied after)
+const pendingKills = [];
+
+// ---------- Helpers ----------
+function idx(x, y) { return y * state.map.w + x; }
+function inBounds(x, y) { return x >= 0 && y >= 0 && x < state.map.w && y < state.map.h; }
+function refreshCounts() {
+  const c = state.counts;
+  for (let i = 0; i < 10; i++) c[i] = 0;
+  let live = 0;
+  const g = state.grid;
+  for (let i = 0; i < g.length; i++) {
+    const o = g[i];
+    if (o === WALL) continue;
+    live++;
+    if (o >= 0 && o < 10) c[o]++;
+  }
+  state.totalLiveCells = Math.max(1, live);
+}
+
+// ---------- Map / player setup ----------
+function setupMap(key) {
+  const def = MAPS[key];
+  state.map = def;
+  CELL = Math.floor(Math.min(W, H) / Math.max(def.w, def.h));
+  state.grid  = new Int8Array(def.w * def.h).fill(EMPTY);
+  state.trail = new Int8Array(def.w * def.h).fill(EMPTY);
+  for (const [wx, wy] of (def.walls || [])) {
+    if (inBounds(wx, wy)) state.grid[idx(wx, wy)] = WALL;
+  }
+  state.players = [];
+  state.particles = [];
+  state.botsKilled = 0;
+  state.elapsed = 0;
+  state.lastWinner = null;
+  pendingKills.length = 0;
+
+  const total = def.players;
+  const cx = def.w / 2, cy = def.h / 2;
+  const r  = Math.min(def.w, def.h) * 0.38;
+  for (let i = 0; i < total; i++) {
+    const angle = (i / total) * Math.PI * 2 - Math.PI / 2;
+    const sx = clamp(Math.round(cx + Math.cos(angle) * r), 2, def.w - 3);
+    const sy = clamp(Math.round(cy + Math.sin(angle) * r), 2, def.h - 3);
+    state.players.push(makePlayer(i, sx, sy, i === 0));
+  }
+  refreshCounts();
+  territoryDirty = true;
+}
+
+// Minimum alive count to preserve (based on map + current user territory %).
+// Returns 0 once the user has crossed the top threshold — from that point on
+// the match is allowed to dwindle naturally to the final showdown.
+function currentFloor() {
+  if (!state.map) return 0;
+  const m = state.map;
+  const userPct = (state.counts[0] / state.totalLiveCells) * 100;
+  if (m.softFloor !== undefined && userPct > m.softPct) return 0;          // past soft threshold → no floor
+  if (m.softFloor !== undefined && userPct > m.floorPct) return m.softFloor; // dropped to soft floor
+  if (userPct > m.floorPct) return 0;                                      // simple maps: past threshold → no floor
+  return m.baseFloor;
+}
+
+
+function makePlayer(id, sx, sy, isUser) {
+  const p = {
+    id,
+    name: isUser ? 'YOU' : BOT_NAMES[id - 1],
+    colorVar: PLAYER_COLORS[id],
+    x: sx, y: sy,
+    startX: sx, startY: sy,
+    dir: DIRS[randInt(0, 3)],
+    nextDir: null,
+    moveT: 0,
+    alive: true,
+    isBot: !isUser,
+    trailCells: [],
+    deathAnim: 0,
+    // Bot personality
+    maxTrail: 5 + randInt(3, 16),
+    wanderChance: 0.04 + Math.random() * 0.08,
+  };
+  stampBase(p);
+  return p;
+}
+
+function stampBase(p) {
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      const x = p.x + dx, y = p.y + dy;
+      if (!inBounds(x, y)) continue;
+      const i = idx(x, y);
+      if (state.grid[i] === WALL) continue;
+      state.grid[i] = p.id;
+      state.trail[i] = EMPTY;
+    }
+  }
+}
+
+// ---------- Bot AI ----------
+// Score each candidate direction. Higher = safer / better.
+// Hard-rejected options (self-kill, reversing into own trail) get -Infinity so
+// they can never be picked, meaning a bot will never intentionally choose a
+// move that guarantees its death.
+function scoreDir(bot, d) {
+  // Reversing is illegal while trailing (would cross self).
+  if (d === OPPOSITE[bot.dir] && bot.trailCells.length > 0) return -Infinity;
+
+  const nx = bot.x + DX[d], ny = bot.y + DY[d];
+  if (!inBounds(nx, ny))              return -80;   // wall crash — survivable via pivot
+  const ii = idx(nx, ny);
+  if (state.grid[ii] === WALL)        return -80;
+  if (state.trail[ii] === bot.id)     return -Infinity; // instant self-kill
+  // About to step onto another player's head (mutual KO)
+  for (const other of state.players) {
+    if (other === bot || !other.alive) continue;
+    if (other.x === nx && other.y === ny) return -60;
+  }
+
+  let score = 0;
+  // Enemy trail → stepping there kills THEM. Big bonus.
+  const tr = state.trail[ii];
+  if (tr !== EMPTY && tr !== bot.id) score += 60;
+
+  // Prefer cells that aren't already ours (progress)
+  if (state.grid[ii] === bot.id && bot.trailCells.length === 0) score -= 1;
+
+  // Look one step further to avoid painting into corners.
+  const nx2 = nx + DX[d], ny2 = ny + DY[d];
+  if (!inBounds(nx2, ny2))            score -= 4;
+  else {
+    const ii2 = idx(nx2, ny2);
+    if (state.grid[ii2] === WALL)     score -= 4;
+    if (state.trail[ii2] === bot.id)  score -= 15; // self-trail one step away
+  }
+  return score;
+}
+
+function bestDirs(bot) {
+  const scored = DIRS.map(d => ({ d, s: scoreDir(bot, d) }));
+  scored.sort((a, b) => b.s - a.s);
+  const top = scored[0];
+  if (top.s === -Infinity) return [];
+  // Return all dirs tied with the best score (for randomized pick).
+  return scored.filter(x => x.s === top.s).map(x => x.d);
+}
+
+function botAI(bot) {
+  const safe = bestDirs(bot);
+  if (safe.length === 0) return; // doomed — keep heading
+
+  const onOwn = state.grid[idx(bot.x, bot.y)] === bot.id;
+
+  // Out and trail too long? head home.
+  if (!onOwn && bot.trailCells.length >= bot.maxTrail) {
+    bot.nextDir = pickHomeDir(bot, safe);
+    return;
+  }
+  // On own territory and not trailing? occasionally venture outward.
+  if (onOwn && bot.trailCells.length === 0) {
+    if (Math.random() < 0.08) {
+      bot.nextDir = pickOutwardDir(bot, safe) || safe[randInt(0, safe.length - 1)];
+    }
+    return; // otherwise keep current direction (which stays on own territory)
+  }
+  // Current direction safe enough? keep going unless the wander die says otherwise.
+  if (safe.includes(bot.dir)) {
+    if (Math.random() < bot.wanderChance) {
+      bot.nextDir = safe[randInt(0, safe.length - 1)];
+    }
+    return;
+  }
+  // Current dir is NOT in the top-scored set — steer to one that is.
+  bot.nextDir = safe[randInt(0, safe.length - 1)];
+}
+
+function pickHomeDir(bot, opts) {
+  const dx = bot.startX - bot.x;
+  const dy = bot.startY - bot.y;
+  const primary = Math.abs(dx) > Math.abs(dy)
+    ? (dx > 0 ? 'right' : 'left')
+    : (dy > 0 ? 'down'  : 'up');
+  if (opts.includes(primary)) return primary;
+  const secondary = Math.abs(dx) > Math.abs(dy)
+    ? (dy > 0 ? 'down' : 'up')
+    : (dx > 0 ? 'right' : 'left');
+  if (opts.includes(secondary)) return secondary;
+  return opts[0];
+}
+
+function pickOutwardDir(bot, opts) {
+  const cx = state.map.w / 2, cy = state.map.h / 2;
+  const dx = bot.x - cx, dy = bot.y - cy;
+  const primary = Math.abs(dx) > Math.abs(dy)
+    ? (dx > 0 ? 'right' : 'left')
+    : (dy > 0 ? 'down'  : 'up');
+  return opts.includes(primary) ? primary : null;
+}
+
+// When about to crash into a wall/OOB, pick a perpendicular turn that keeps
+// the bot alive. Prefers the turn that stays farther from the edge.
+function pickWallTurn(bot) {
+  const perp = (bot.dir === 'up' || bot.dir === 'down')
+    ? ['left', 'right']
+    : ['up', 'down'];
+  const safe = [];
+  for (const d of perp) {
+    const nx = bot.x + DX[d], ny = bot.y + DY[d];
+    if (!inBounds(nx, ny)) continue;
+    const ii = idx(nx, ny);
+    if (state.grid[ii] === WALL) continue;
+    if (state.trail[ii] === bot.id) continue; // never self-kill on the pivot
+    safe.push(d);
+  }
+  if (safe.length === 0) return null;
+  if (safe.length === 1) return safe[0];
+  // Prefer whichever leads farther into the map.
+  const cx = state.map.w / 2, cy = state.map.h / 2;
+  safe.sort((a, b) => {
+    const ax = bot.x + DX[a], ay = bot.y + DY[a];
+    const bx = bot.x + DX[b], by = bot.y + DY[b];
+    return Math.hypot(ax - cx, ay - cy) - Math.hypot(bx - cx, by - cy);
+  });
+  return safe[0];
+}
+
+// ---------- Tick advance (two-phase) ----------
+// Phase 1: every alive player picks its intended destination (no state mutation).
+// Phase 2: resolve collisions against intended destinations, not stale positions.
+// Phase 3: apply moves & territory logic for survivors.
+//
+// This fixes the "ghost head-on" bug where a follower targeting an enemy's
+// current cell used to kill both players, even when the enemy was about to
+// vacate that cell in the same tick.
+function advanceTick() {
+  // ----- Phase 1: plan every alive player's move -----
+  const plans = [];
+  for (const p of state.players) {
+    if (!p.alive) continue;
+
+    // Apply buffered direction (pre-AI for the human, re-checked post-AI for bots)
+    if (p.nextDir && p.nextDir !== OPPOSITE[p.dir]) {
+      p.dir = p.nextDir;
+      p.nextDir = null;
+    }
+    if (p.isBot) {
+      botAI(p);
+      if (p.nextDir && p.nextDir !== OPPOSITE[p.dir]) {
+        p.dir = p.nextDir;
+        p.nextDir = null;
+      }
+      // Wall-pivot safety net: if the chosen direction walks out-of-bounds or
+      // into a wall, turn instead of dying. Bots never perish to the map edge.
+      const px = p.x + DX[p.dir], py = p.y + DY[p.dir];
+      if (!inBounds(px, py) || state.grid[idx(px, py)] === WALL) {
+        const turn = pickWallTurn(p);
+        if (turn) p.dir = turn;
+      }
+    }
+
+    const nx = p.x + DX[p.dir];
+    const ny = p.y + DY[p.dir];
+    const blocked = !inBounds(nx, ny) || state.grid[idx(nx, ny)] === WALL;
+
+    plans.push({
+      p,
+      fromX: p.x,
+      fromY: p.y,
+      nx, ny,
+      blocked,
+      willDie: false,
+    });
+  }
+
+  // ----- Phase 2: resolve collisions -----
+
+  // 2a. Blocked human player dies (bots idle this tick instead).
+  for (const plan of plans) {
+    if (!plan.blocked) continue;
+    if (!plan.p.isBot) {
+      plan.willDie = true;
+      pendingKills.push(plan.p);
+    }
+  }
+
+  // 2b. Two or more players targeting the SAME cell → all die (convergence).
+  const cellMap = new Map();
+  for (const plan of plans) {
+    if (plan.willDie || plan.blocked) continue;
+    const key = plan.nx + ',' + plan.ny;
+    if (!cellMap.has(key)) cellMap.set(key, []);
+    cellMap.get(key).push(plan);
+  }
+  for (const list of cellMap.values()) {
+    if (list.length > 1) {
+      for (const plan of list) {
+        plan.willDie = true;
+        pendingKills.push(plan.p);
+      }
+    }
+  }
+
+  // 2c. Pairs SWAPPING cells (A→B.from, B→A.from) → both die (pass-through).
+  for (let i = 0; i < plans.length; i++) {
+    const a = plans[i];
+    if (a.willDie || a.blocked) continue;
+    for (let j = i + 1; j < plans.length; j++) {
+      const b = plans[j];
+      if (b.willDie || b.blocked) continue;
+      if (a.nx === b.fromX && a.ny === b.fromY &&
+          b.nx === a.fromX && b.ny === a.fromY) {
+        a.willDie = true;
+        b.willDie = true;
+        pendingKills.push(a.p);
+        pendingKills.push(b.p);
+      }
+    }
+  }
+
+  // 2d. Head-on with a STATIONARY player (blocked or idling bot).
+  // Only trigger when the target cell's occupant is not moving out this tick.
+  for (const plan of plans) {
+    if (plan.willDie || plan.blocked) continue;
+    for (const other of plans) {
+      if (other === plan) continue;
+      if (!other.blocked) continue; // moving players = pass-through, not a collision
+      if (plan.nx === other.fromX && plan.ny === other.fromY) {
+        plan.willDie = true;
+        pendingKills.push(plan.p);
+        if (!other.willDie) {
+          other.willDie = true;
+          pendingKills.push(other.p);
+        }
+      }
+    }
+  }
+
+  // 2e. Trail collisions — scanned against the tick-start trail bitmap.
+  // Stepping on someone else's trail cuts them; stepping on your own crashes you.
+  for (const plan of plans) {
+    if (plan.willDie || plan.blocked) continue;
+    const ti = idx(plan.nx, plan.ny);
+    const trailOwnerId = state.trail[ti];
+    if (trailOwnerId === EMPTY) continue;
+    if (trailOwnerId === plan.p.id) {
+      // Self-crash
+      plan.willDie = true;
+      pendingKills.push(plan.p);
+    } else {
+      const owner = state.players[trailOwnerId];
+      if (owner && owner.alive) pendingKills.push(owner);
+      // Mover survives — they keep advancing onto (and past) the cut trail.
+    }
+  }
+
+  // ----- Phase 3: apply moves for survivors + territory logic -----
+  for (const plan of plans) {
+    if (plan.willDie || plan.blocked) continue;
+    const { p, nx, ny } = plan;
+    p.x = nx;
+    p.y = ny;
+
+    const ti = idx(nx, ny);
+    const cellOwner = state.grid[ti];
+    if (cellOwner === p.id) {
+      if (p.trailCells.length > 0) closeLoop(p);
+    } else {
+      state.trail[ti] = p.id;
+      p.trailCells.push({ x: nx, y: ny });
+    }
+  }
+}
+
+// ---------- Flood-fill capture ----------
+function closeLoop(p) {
+  const w = state.map.w, h = state.map.h;
+  const g = state.grid, tr = state.trail;
+
+  // 1. Convert trail cells to territory
+  for (const c of p.trailCells) {
+    const i = c.y * w + c.x;
+    g[i] = p.id;
+    tr[i] = EMPTY;
+  }
+
+  // 2. Record enemy positions before capture so we can detect who got enclosed
+  const enemyAt = []; // [{other, i}]
+  for (const other of state.players) {
+    if (other === p || !other.alive) continue;
+    enemyAt.push({ other, i: other.y * w + other.x });
+  }
+
+  // 3. Flood fill from all boundary cells that aren't p's territory.
+  const visited = new Uint8Array(w * h);
+  const stack = [];
+  const push = (i) => {
+    if (visited[i]) return;
+    if (g[i] === p.id) return;
+    visited[i] = 1;
+    stack.push(i);
+  };
+  for (let x = 0; x < w; x++) { push(x); push((h - 1) * w + x); }
+  for (let y = 0; y < h; y++) { push(y * w); push(y * w + w - 1); }
+  while (stack.length) {
+    const i = stack.pop();
+    const y = (i / w) | 0;
+    const x = i - y * w;
+    if (x > 0)      push(i - 1);
+    if (x < w - 1)  push(i + 1);
+    if (y > 0)      push(i - w);
+    if (y < h - 1)  push(i + w);
+  }
+
+  // 4. Any non-visited, non-p, non-wall cell is enclosed → capture it.
+  const killedTrails = new Set();
+  for (let i = 0; i < w * h; i++) {
+    if (visited[i]) continue;
+    if (g[i] === p.id) continue;
+    if (g[i] === WALL) continue;
+    g[i] = p.id;
+    if (tr[i] !== EMPTY && tr[i] !== p.id) {
+      killedTrails.add(tr[i]);
+      tr[i] = EMPTY;
+    }
+  }
+
+  // 5. Kill enemies that got enclosed
+  for (const { other, i } of enemyAt) {
+    if (g[i] === p.id && other.alive) pendingKills.push(other);
+  }
+  // 6. Kill any enemy whose trail got chopped by the capture
+  for (const id of killedTrails) {
+    const owner = state.players[id];
+    if (owner && owner.alive && owner !== p) pendingKills.push(owner);
+  }
+
+  p.trailCells = [];
+  territoryDirty = true;
+
+  // Small reward feedback for the user
+  if (p === state.players[0]) sfx.capture();
+}
+
+// ---------- Death / respawn ----------
+function killPlayer(p) {
+  if (!p.alive) return;
+  p.alive = false;
+  p.deathAnim = 0.7;
+
+  // Clear their territory & trail
+  const g = state.grid, tr = state.trail;
+  for (let i = 0; i < g.length; i++) {
+    if (g[i] === p.id) g[i] = EMPTY;
+    if (tr[i] === p.id) tr[i] = EMPTY;
+  }
+  p.trailCells = [];
+  territoryDirty = true;
+
+  // Spark particles
+  const px = p.x * CELL + CELL / 2;
+  const py = p.y * CELL + CELL / 2;
+  for (let i = 0; i < 22; i++) {
+    state.particles.push({
+      x: px, y: py,
+      vx: rand(-220, 220), vy: rand(-260, -60),
+      life: rand(0.3, 0.7), maxLife: 0.7,
+      size: rand(2, 4),
+      colorVar: p.colorVar,
+    });
+  }
+
+  if (p === state.players[0]) {
+    sfx.death();
+    // Schedule game over with short delay for dissolve
+    setTimeout(endGame, 700);
+  } else {
+    sfx.botDeath();
+    state.botsKilled++;
+    // Refresh counts so the floor check sees the up-to-date user %.
+    refreshCounts();
+    const floor = currentFloor();
+    let aliveNow = 0;
+    for (const pp of state.players) if (pp.alive) aliveNow++;
+
+    let shouldRespawn = false;
+    if (aliveNow < floor) {
+      // Under the floor → force a respawn regardless of the cadence counter.
+      shouldRespawn = true;
+    } else if (state.botsKilled >= 2) {
+      state.botsKilled -= 2;
+      shouldRespawn = true;
+    }
+
+    if (shouldRespawn) setTimeout(() => respawnBot(p), 900);
+  }
+}
+
+function respawnBot(deadBot) {
+  if (state.mode !== 'playing') return;
+  const w = state.map.w, h = state.map.h;
+  let sx = deadBot.startX, sy = deadBot.startY, found = false;
+  // Try to find a 5x5 empty region
+  for (let tries = 0; tries < 300 && !found; tries++) {
+    const cx = randInt(3, w - 4);
+    const cy = randInt(3, h - 4);
+    let ok = true;
+    for (let dy = -2; dy <= 2 && ok; dy++) {
+      for (let dx = -2; dx <= 2 && ok; dx++) {
+        const i = (cy + dy) * w + (cx + dx);
+        if (state.grid[i] !== EMPTY || state.trail[i] !== EMPTY) ok = false;
+      }
+    }
+    if (ok) { sx = cx; sy = cy; found = true; }
+  }
+
+  deadBot.x = sx; deadBot.y = sy;
+  deadBot.startX = sx; deadBot.startY = sy;
+  deadBot.dir = DIRS[randInt(0, 3)];
+  deadBot.nextDir = null;
+  deadBot.moveT = 0;
+  deadBot.alive = true;
+  deadBot.trailCells = [];
+  deadBot.deathAnim = 0;
+  deadBot.maxTrail = 5 + randInt(3, 16);
+  deadBot.wanderChance = 0.04 + Math.random() * 0.08;
+  stampBase(deadBot);
+  territoryDirty = true;
+  sfx.spawn();
+}
+
+// ---------- Game flow ----------
+function startGame() {
+  setupMap(state.selectedMap);
+  state.mode = 'playing';
+  hideAllOverlays();
+  tickAcc = 0;
+  lastT = performance.now();
+  sfx.spawn();
+}
+
+function endGame() {
+  if (state.mode === 'gameover') return;
+  state.mode = 'gameover';
+  refreshCounts();
+  const pct = (state.counts[0] / state.totalLiveCells) * 100;
+  if (pct > state.bestPct) {
+    state.bestPct = pct;
+    localStorage.setItem('vv.best', pct.toFixed(1));
+  }
+
+  // Who "won"? Whoever has the most territory among alive players.
+  let winnerId = 0, winnerPct = -1;
+  for (let i = 0; i < 10; i++) {
+    const pp = (state.counts[i] / state.totalLiveCells) * 100;
+    if (pp > winnerPct) { winnerPct = pp; winnerId = i; }
+  }
+  const userIsWinner = winnerId === 0 && state.players[0].alive;
+
+  const title = document.getElementById('endTitle');
+  const blurb = document.getElementById('endBlurb');
+  if (userIsWinner) {
+    title.textContent = 'VALLEY CLAIMED';
+    title.style.color = 'var(--accent-2)';
+    blurb.textContent = 'Every signal silenced. The vapor is yours.';
+  } else if (state.players[0].alive) {
+    // The user survived but ran out of bots somehow — treat as a peaceful end
+    title.textContent = 'SURVIVED';
+    title.style.color = 'var(--accent-3)';
+    blurb.textContent = 'You held your ground. Not first — but still here.';
+  } else {
+    title.textContent = 'DISSOLVED';
+    title.style.color = 'var(--accent-hot)';
+    blurb.textContent = 'Your signal fades into the vapor.';
+  }
+
+  document.getElementById('finalPct').textContent = pct.toFixed(1) + '%';
+  document.getElementById('finalTime').textContent = Math.floor(state.elapsed) + 's';
+  document.getElementById('finalMap').textContent = state.map.name;
+  showOverlay('gameoverScreen');
+  sfx.gameover();
+
+  if (window.NostalgiaScores) {
+    window.NostalgiaScores.submitAndReport(
+      'vapor-valley', pct, document.getElementById('scoreStatus')
+    );
+  }
+}
+
+// ---------- Update / loop ----------
+let lastT = performance.now();
+let tickAcc = 0;
+const TICK_MS = 110;      // cell advance rate
+
+function update(dt) {
+  if (state.mode !== 'playing') return;
+  state.elapsed += dt;
+
+  // Discrete cell advance at TICK_MS intervals
+  tickAcc += dt * 1000;
+  let safety = 8;
+  while (tickAcc >= TICK_MS && safety-- > 0) {
+    tickAcc -= TICK_MS;
+    // Update moveT so visual interpolation resets cleanly
+    for (const p of state.players) if (p.alive) p.moveT = 0;
+    advanceTick();
+    // Apply pending kills, de-duplicated
+    if (pendingKills.length) {
+      const seen = new Set();
+      for (const p of pendingKills) {
+        if (seen.has(p.id)) continue;
+        seen.add(p.id);
+        killPlayer(p);
+      }
+      pendingKills.length = 0;
+    }
+    // End check: everyone else dead (and user alive)
+    const liveBots = state.players.filter(p => p.alive && p.isBot).length;
+    if (liveBots === 0 && state.players[0].alive) {
+      setTimeout(endGame, 400);
+    }
+  }
+
+  // Continuous visual interpolation
+  const frac = tickAcc / TICK_MS;
+  for (const p of state.players) if (p.alive) p.moveT = clamp(frac, 0, 1);
+
+  // Death animation
+  for (const p of state.players) {
+    if (p.deathAnim > 0) p.deathAnim = Math.max(0, p.deathAnim - dt);
+  }
+
+  // Particles
+  for (let i = state.particles.length - 1; i >= 0; i--) {
+    const pt = state.particles[i];
+    pt.life -= dt;
+    pt.x += pt.vx * dt;
+    pt.y += pt.vy * dt;
+    pt.vy += 320 * dt;
+    if (pt.life <= 0) state.particles.splice(i, 1);
+  }
+}
+
+// ---------- Render ----------
+function renderTerritoryOffscreen() {
+  const w = state.map.w, h = state.map.h;
+  tctx.clearRect(0, 0, W, H);
+  const g = state.grid;
+  // Pre-resolve colors once per repaint
+  const colors = PLAYER_COLORS.map(v => css(v));
+  const wallColor = css('--wall');
+  for (let i = 0; i < g.length; i++) {
+    const o = g[i];
+    if (o === EMPTY) continue;
+    const y = (i / w) | 0;
+    const x = i - y * w;
+    tctx.fillStyle = (o === WALL) ? wallColor : colors[o];
+    tctx.fillRect(x * CELL, y * CELL, CELL, CELL);
+  }
+  territoryDirty = false;
+}
+
+function render() {
+  const w = state.map.w, h = state.map.h;
+  const mapW = w * CELL, mapH = h * CELL;
+  const offsetX = Math.floor((W - mapW) / 2);
+  const offsetY = Math.floor((H - mapH) / 2);
+
+  // Full background wipe
+  ctx.fillStyle = css('--bg-alt');
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.save();
+  ctx.translate(offsetX, offsetY);
+
+  // Soft playfield base
+  ctx.fillStyle = css('--panel');
+  ctx.globalAlpha = 0.55;
+  ctx.fillRect(0, 0, mapW, mapH);
+  ctx.globalAlpha = 1;
+
+  // Grid dots
+  ctx.fillStyle = css('--grid-line');
+  for (let y = 0; y <= h; y++) {
+    ctx.fillRect(0, y * CELL, mapW, 1);
+  }
+  for (let x = 0; x <= w; x++) {
+    ctx.fillRect(x * CELL, 0, 1, mapH);
+  }
+
+  // Territory (offscreen)
+  if (territoryDirty) renderTerritoryOffscreen();
+  ctx.drawImage(territoryCanvas, 0, 0);
+
+  // Trails with pulse
+  const t = performance.now() / 280;
+  ctx.save();
+  ctx.globalAlpha = 0.55 + 0.28 * Math.sin(t);
+  for (const p of state.players) {
+    if (!p.alive || p.trailCells.length === 0) continue;
+    ctx.fillStyle = css(p.colorVar);
+    const trailCells = p.trailCells;
+    const inset = Math.max(1, Math.floor(CELL * 0.15));
+    for (let k = 0; k < trailCells.length; k++) {
+      const c = trailCells[k];
+      ctx.fillRect(c.x * CELL + inset, c.y * CELL + inset, CELL - inset * 2, CELL - inset * 2);
+    }
+  }
+  ctx.restore();
+
+  // Players
+  for (const p of state.players) {
+    if (!p.alive) continue;
+    const rx = (p.x + DX[p.dir] * p.moveT) * CELL + CELL / 2;
+    const ry = (p.y + DY[p.dir] * p.moveT) * CELL + CELL / 2;
+    const c = css(p.colorVar);
+
+    // Halo
+    ctx.fillStyle = c;
+    ctx.globalAlpha = 0.25;
+    ctx.beginPath();
+    ctx.arc(rx, ry, CELL * 1.05, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // Body
+    const body = Math.max(6, CELL * 0.8);
+    ctx.fillStyle = c;
+    ctx.fillRect(rx - body / 2, ry - body / 2, body, body);
+    // Inner highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.fillRect(rx - body / 2 + 1, ry - body / 2 + 1, Math.max(2, body - 2), Math.max(1, Math.floor(body / 4)));
+    // Outline
+    ctx.strokeStyle = css('--text');
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(rx - body / 2 + 0.5, ry - body / 2 + 0.5, body - 1, body - 1);
+
+    // User indicator: outer ring
+    if (p.id === 0) {
+      ctx.strokeStyle = css('--text');
+      ctx.lineWidth = 2;
+      ctx.strokeRect(rx - body / 2 - 3, ry - body / 2 - 3, body + 6, body + 6);
+    }
+  }
+
+  // Particles
+  for (const pt of state.particles) {
+    const a = clamp(pt.life / pt.maxLife, 0, 1);
+    ctx.globalAlpha = a;
+    ctx.fillStyle = css(pt.colorVar);
+    ctx.fillRect(pt.x - pt.size / 2, pt.y - pt.size / 2, pt.size, pt.size);
+  }
+  ctx.globalAlpha = 1;
+
+  // Border
+  ctx.strokeStyle = css('--text');
+  ctx.lineWidth = 2;
+  ctx.strokeRect(0.5, 0.5, mapW - 1, mapH - 1);
+
+  ctx.restore();
+}
+
+// ---------- HUD ----------
+let hudAcc = 0;
+function updateHUD(dt) {
+  hudAcc += dt;
+  if (hudAcc < 0.15) return;
+  hudAcc = 0;
+
+  if (!state.map) return;
+  refreshCounts();
+  const userPct = (state.counts[0] / state.totalLiveCells) * 100;
+  document.getElementById('territoryPct').textContent = userPct.toFixed(1) + '%';
+  const alive = state.players.filter(p => p.alive).length;
+  document.getElementById('aliveCount').textContent = String(alive);
+  document.getElementById('mapName').textContent = state.map.name;
+  document.getElementById('bestPct').textContent = state.bestPct.toFixed(1) + '%';
+
+  renderLeaderboard();
+}
+
+function renderLeaderboard() {
+  const body = document.getElementById('leaderboardBody');
+  if (!body) return;
+  const rows = [];
+  for (let i = 0; i < 10; i++) {
+    const p = state.players[i];
+    if (!p) continue;
+    const pct = (state.counts[i] / state.totalLiveCells) * 100;
+    rows.push({ p, pct });
+  }
+  rows.sort((a, b) => b.pct - a.pct);
+  body.innerHTML = rows.map((r) => {
+    const cls = [r.p.alive ? '' : 'dead', r.p.id === 0 ? 'you' : ''].filter(Boolean).join(' ');
+    return `<div class="lb-row ${cls}">` +
+      `<span class="lb-dot" style="background:var(${r.p.colorVar})"></span>` +
+      `<span class="lb-name">${r.p.name}</span>` +
+      `<span class="lb-pct">${r.pct.toFixed(1)}%</span>` +
+      `</div>`;
+  }).join('');
+}
+
+// ---------- Main loop ----------
+function loop(now) {
+  const dt = Math.min((now - lastT) / 1000, 0.033);
+  lastT = now;
+  update(dt);
+  render();
+  updateHUD(dt);
+  requestAnimationFrame(loop);
+}
+
+// ---------- Map picker ----------
+const mapButtons = Array.from(document.querySelectorAll('#mapPicker .map-card'));
+function selectMap(key) {
+  state.selectedMap = key;
+  mapButtons.forEach(b => b.classList.toggle('selected', b.dataset.map === key));
+}
+mapButtons.forEach(b => {
+  b.addEventListener('click', () => selectMap(b.dataset.map));
+});
+
+// ---------- Input ----------
+function setUserDir(d) {
+  const p = state.players[0];
+  if (!p || !p.alive || state.mode !== 'playing') return;
+  if (d === OPPOSITE[p.dir] && p.trailCells.length > 0) return; // hard reject reverse while trailing
+  p.nextDir = d;
+}
+
+document.addEventListener('keydown', (e) => {
+  const key = e.key.toLowerCase();
+  if (['arrowleft','arrowright','arrowup','arrowdown',' '].includes(key)) e.preventDefault();
+  if (key === 'arrowup' || key === 'w')    setUserDir('up');
+  if (key === 'arrowdown' || key === 's')  setUserDir('down');
+  if (key === 'arrowleft' || key === 'a')  setUserDir('left');
+  if (key === 'arrowright' || key === 'd') setUserDir('right');
+  if (key === 'p') {
+    if (state.mode === 'playing') { state.mode = 'paused'; showOverlay('pauseScreen'); }
+    else if (state.mode === 'paused') { state.mode = 'playing'; hideAllOverlays(); lastT = performance.now(); }
+  }
+  if (key === 'r' && state.mode !== 'menu') { initAudio(); startGame(); }
+  if (key === 'm') { audio.toggle(); updateMuteLabel(); }
+});
+
+// Touch D-pad
+[['tUp','up'],['tDown','down'],['tLeft','left'],['tRight','right']].forEach(([id, d]) => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const handler = (e) => { e.preventDefault(); initAudio(); setUserDir(d); };
+  el.addEventListener('touchstart', handler, { passive: false });
+  el.addEventListener('mousedown',  handler);
+});
+
+// Overlay buttons
+document.getElementById('startBtn').addEventListener('click', () => { initAudio(); startGame(); });
+document.getElementById('retryBtn').addEventListener('click', () => { initAudio(); startGame(); });
+document.getElementById('menuBtn').addEventListener('click',  () => { state.mode = 'menu'; showOverlay('startScreen'); });
+document.getElementById('resumeBtn').addEventListener('click', () => {
+  state.mode = 'playing'; hideAllOverlays(); lastT = performance.now();
+});
+document.getElementById('restartBtnPause').addEventListener('click', () => { initAudio(); startGame(); });
+
+// ---------- Init ----------
+// Preview the currently-selected map behind the start overlay.
+setupMap(state.selectedMap);
+state.mode = 'menu';
+showOverlay('startScreen');
+requestAnimationFrame(loop);
+})();
+</script>
+
+</body>
+</html>

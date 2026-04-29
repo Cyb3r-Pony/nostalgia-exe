@@ -1,0 +1,1255 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>Overheat Arena — Nostalgia.exe</title>
+<link rel="icon" type="image/svg+xml" href="../favicon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=Press+Start+2P&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="shared/arcade.css" />
+<style>
+  /* ==========================================================
+     OVERHEAT ARENA — top-down shooter palette. Player chassis
+     shifts cyan → orange → red as heat rises; the rest of the
+     scene stays cool so the heat reading dominates.
+     ========================================================== */
+  :root {
+    --player-cool: #5ff0c9;
+    --player-mid:  #ffd86b;
+    --player-warm: #ff7a30;
+    --player-hot:  #ff4fa1;
+    --player-core: #ffffff;
+    --bullet:      #ffd86b;
+    --enemy-frag:  #ff4fa1;
+    --enemy-heavy: #b388ff;
+    --enemy-split: #5ff0c9;
+    --enemy-track: #ffd86b;
+    --grid-line:   #2a1a6a;
+    --grid-line-2: #3a2390;
+    --bg-deep:     #060218;
+    --bg-mid:      #160a36;
+    --heat-cool:   #5ff0c9;
+    --heat-warm:   #ffd86b;
+    --heat-hot:    #ff7a30;
+    --heat-crit:   #ff4fa1;
+    --pickup-cool: #5ff0c9;
+    --pickup-shield:#b388ff;
+    --star:        #6b5ab8;
+  }
+  [data-theme="light"] {
+    --player-cool: #1aa88a;
+    --player-mid:  #b88500;
+    --player-warm: #c84810;
+    --player-hot:  #c03a7a;
+    --player-core: #1a1a28;
+    --bullet:      #b88500;
+    --enemy-frag:  #c03a7a;
+    --enemy-heavy: #7a58b0;
+    --enemy-split: #1aa88a;
+    --enemy-track: #b88500;
+    --grid-line:   #b8a0d0;
+    --grid-line-2: #a895c0;
+    --bg-deep:     #d8c8e8;
+    --bg-mid:      #c8b4dc;
+    --heat-cool:   #1aa88a;
+    --heat-warm:   #b88500;
+    --heat-hot:    #c84810;
+    --heat-crit:   #c03a7a;
+    --pickup-cool: #1aa88a;
+    --pickup-shield:#7a58b0;
+    --star:        #6e5890;
+  }
+
+  canvas { max-width: 100%; max-height: 100%; image-rendering: pixelated; cursor: crosshair; }
+
+  .controls-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 6px 14px;
+    margin: 18px 0 22px;
+    text-align: left;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .controls-grid kbd {
+    background: var(--panel-2);
+    border: 1px solid var(--text);
+    padding: 2px 6px;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 9px;
+    min-width: 44px;
+    text-align: center;
+  }
+
+  /* Heat-zone legend on start menu — same enlarged-icon pattern. */
+  .heat-legend {
+    display: grid;
+    grid-template-columns: 32px 1fr;
+    gap: 8px 14px;
+    align-items: center;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    margin-bottom: 22px;
+  }
+  .heat-legend span:nth-child(odd) {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 22px;
+    line-height: 1;
+    text-align: center;
+    text-shadow: 0 0 6px currentColor;
+  }
+</style>
+</head>
+<body>
+
+<div class="bg-grid"></div>
+<div class="scanlines"></div>
+
+<header class="topbar">
+  <a href="../index.html" class="back">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    EXIT
+  </a>
+  <div class="title-tag">OVERHEAT ARENA<span class="ver">v1.0.0 // BURN.EXE</span></div>
+  <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme"></button>
+</header>
+
+<section class="hud" id="hud">
+  <div class="hud-col">
+    <div class="hud-stat score">SCORE<strong id="hudScore">000000</strong></div>
+    <div class="hud-stat">TIME<strong id="hudTime">0.0s</strong></div>
+  </div>
+  <div class="hud-col">
+    <div class="hud-stat best">BEST<strong id="hudBest">000000</strong></div>
+    <div class="hud-stat">KILLS<strong id="hudKills">0</strong></div>
+  </div>
+  <div class="hud-col">
+    <div class="hud-stat" id="hudHeat">HEAT<strong id="hudHeatVal">0%</strong></div>
+    <div class="hud-stat">MULT<strong id="hudMult">×1.0</strong></div>
+  </div>
+</section>
+
+<div class="stage">
+  <canvas id="game" width="720" height="480"></canvas>
+</div>
+
+<footer class="bottombar">
+  <div class="keys">
+    <span><kbd>WASD</kbd>/<kbd>↑↓←→</kbd> MOVE</span>
+    <span><kbd>SPACE</kbd> SHOOT</span>
+    <span><kbd>SHIFT</kbd> DASH</span>
+    <span><kbd>P</kbd> PAUSE</span>
+    <span><kbd>R</kbd> RESTART</span>
+  </div>
+  <div>© NOSTALGIA.EXE — <span class="blink">█</span></div>
+</footer>
+
+<div class="touch" id="touch">
+  <div class="left-cluster">
+    <button id="tUp"    aria-label="Up">▲</button>
+    <button id="tDown"  aria-label="Down">▼</button>
+    <button id="tLeft"  aria-label="Left">◀</button>
+    <button id="tRight" aria-label="Right">▶</button>
+  </div>
+  <div class="right-cluster">
+    <button id="tShoot" aria-label="Shoot">●</button>
+    <button id="tDash"  aria-label="Dash">»</button>
+  </div>
+</div>
+
+<!-- Start menu -->
+<div class="overlay" id="startScreen">
+  <div class="card">
+    <div class="card-head">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span>overheat_arena.app</span>
+      <span>_ □ ×</span>
+    </div>
+    <h1>OVERHEAT ARENA</h1>
+    <p>Survive the swarm without melting your own chassis. Every shot, every dash, every step generates heat. Push into the danger zone for higher score multipliers — but cross the line and you self-destruct.</p>
+
+    <div class="controls-grid">
+      <kbd>WASD / ↑↓←→</kbd><span>move (low heat per second while moving)</span>
+      <kbd>SPACE</kbd><span>shoot forward (medium heat per shot)</span>
+      <kbd>SHIFT</kbd><span>dash in current facing (high heat, brief invuln)</span>
+      <kbd>P</kbd><span>pause</span>
+    </div>
+
+    <div class="heat-legend">
+      <span style="color:var(--heat-cool)">▮</span><span>LOW HEAT — score ×1.0, no penalties</span>
+      <span style="color:var(--heat-warm)">▮</span><span>MEDIUM HEAT — score ×1.5, ideal range</span>
+      <span style="color:var(--heat-hot)">▮</span><span>HIGH HEAT — score ×2.0, faster but jittery aim</span>
+      <span style="color:var(--heat-crit)">▮</span><span>CRITICAL — score ×3.0, seconds from explosion</span>
+    </div>
+
+    <button class="btn" id="startBtn">▶ DEPLOY</button>
+    <button class="btn ghost" id="muteBtnMenu">♪ SOUND ON</button>
+  </div>
+</div>
+
+<!-- Pause -->
+<div class="overlay hidden" id="pauseScreen">
+  <div class="card">
+    <div class="card-head">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span>pause.sys</span>
+      <span>_ □ ×</span>
+    </div>
+    <h2>PAUSED</h2>
+    <p>Cooling fans engaged.</p>
+    <button class="btn" id="resumeBtn">▶ RESUME</button>
+    <button class="btn ghost" id="restartBtnPause">↻ RESTART</button>
+  </div>
+</div>
+
+<!-- Game over -->
+<div class="overlay hidden" id="gameoverScreen">
+  <div class="card">
+    <div class="card-head">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span>chassis_lost.log</span>
+      <span>_ □ ×</span>
+    </div>
+    <h2 style="color:var(--accent-hot)" id="gameoverTitle">DESTROYED</h2>
+    <p id="gameoverDetail">The arena swallowed you.</p>
+    <div class="stat-row">
+      <div>SCORE<strong id="finalScore">000000</strong></div>
+      <div>BEST<strong id="finalBest">000000</strong></div>
+      <div>KILLS<strong id="finalKills">0</strong></div>
+    </div>
+    <p id="newBestMsg" style="color:var(--accent-2);margin:4px 0 16px;display:none">✦ NEW BEST ✦</p>
+    <p id="scoreStatus" class="score-status" data-state="idle"></p>
+    <button class="btn" id="retryBtn">↻ RETRY</button>
+    <a href="../index.html" class="btn ghost">◀ EXIT</a>
+  </div>
+</div>
+
+<!-- Public scoreboard plumbing -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.105.1"></script>
+<script src="../shared/supabase-config.js"></script>
+<script src="../shared/auth.js"></script>
+<script src="../shared/scores.js"></script>
+
+<script src="shared/arcade.js"></script>
+<script>
+/* =============================================================
+   OVERHEAT ARENA — top-down arena shooter with heat as a meter
+   that the player must actively manage.
+
+   CORE LOOP
+     • Move with WASD / arrows. Movement direction sets the ship's
+       facing — bullets always fire forward.
+     • Shoot (Space) — costs HEAT_PER_SHOT and has a cooldown that
+       SHRINKS as heat rises (high heat = faster fire, low control).
+     • Dash (Shift) — short directional burst with brief i-frames;
+       costs HEAT_PER_DASH.
+     • Enemies spawn from the arena edges and converge. Touching one
+       without a shield active = game over.
+     • Heat rises with every action and decays passively. If heat
+       crosses 100% the player overheats and explodes.
+
+   HEAT ZONES
+     0 .. 25    LOW       — score ×1.0, no penalties
+     25 .. 60   MEDIUM    — score ×1.5, ideal play range
+     60 .. 85   HIGH      — score ×2.0, +25% move/shoot speed,
+                            small aim wobble
+     85 .. 100  CRITICAL  — score ×3.0, screen flicker, ~2s to vent
+     >= 100     OVERHEAT  — explosion → game over
+
+   ENEMIES
+     • frag    1 hp, slow, common
+     • heavy   3 hp, slow, big — payout 3x
+     • split   1 hp, on death spawns 2 mini-frags
+     • track   1 hp, homes on player
+
+   Slug for scoreboard / DB: overheat-arena.
+   ============================================================= */
+
+(() => {
+const cvs = document.getElementById('game');
+const ctx = cvs.getContext('2d');
+const W = cvs.width, H = cvs.height;
+
+// ---------- Utilities from shared module ----------
+const { clamp, rand, randInt, pad, color, createAudio, createOverlayManager,
+        wireThemeToggle, fitCanvas } = Arcade;
+
+// ---------- Theme + canvas ----------
+wireThemeToggle('themeToggle');
+fitCanvas(cvs, '.stage', 16);
+
+// ---------- Audio ----------
+const sfx = createAudio('oa.muted');
+function shootSfx()    { sfx.beep(720, 0.05, 'square',   0.05, 920); }
+function dashSfx()     { sfx.beep(480, 0.10, 'sawtooth', 0.08, 1100); }
+function hitSfx()      { sfx.beep(880, 0.05, 'square',   0.04, 240); }
+function killSfx()     { sfx.noise(0.07, 0.15); sfx.beep(540, 0.10, 'triangle', 0.08, 220); }
+function overheatSfx() { sfx.noise(0.4, 0.32); sfx.beep(120, 0.55, 'sawtooth', 0.22, 30); }
+function deathSfx()    { sfx.noise(0.3, 0.28); sfx.beep(140, 0.4, 'sawtooth', 0.18, 50); }
+function pickupSfx()   { sfx.beep(960, 0.10, 'triangle', 0.10, 1480); }
+
+// ---------- Overlays ----------
+const { show: showOverlay, hideAll: hideOverlays } =
+  createOverlayManager(['startScreen', 'pauseScreen', 'gameoverScreen']);
+
+// ---------- HUD ----------
+const hudScore   = document.getElementById('hudScore');
+const hudTime    = document.getElementById('hudTime');
+const hudBest    = document.getElementById('hudBest');
+const hudKills   = document.getElementById('hudKills');
+const hudHeatVal = document.getElementById('hudHeatVal');
+const hudHeat    = document.getElementById('hudHeat');
+const hudMult    = document.getElementById('hudMult');
+
+// ---------- Constants ----------
+const PLAYER_R       = 11;
+const PLAYER_BASE_SP = 215;          // px/s at low heat
+const PLAYER_HOT_SP  = 280;          // px/s in high/critical
+const SHOT_BASE_CD   = 0.22;         // s between shots, low heat
+const SHOT_HOT_CD    = 0.10;         // s between shots, critical
+const BULLET_SPEED   = 540;
+const BULLET_R       = 4;
+const BULLET_LIFE    = 1.4;          // s before bullet expires off-screen
+
+const DASH_DIST      = 110;          // pixels per dash
+const DASH_DUR       = 0.16;
+const DASH_COOLDOWN  = 0.5;
+const DASH_IFRAME    = 0.18;         // i-frames after dash starts
+
+// Heat
+const HEAT_MAX        = 100;
+const HEAT_PER_SHOT   = 4.5;
+const HEAT_PER_DASH   = 14;
+const HEAT_PER_SEC_MOVE = 0.6;       // when actively moving
+const HEAT_COOL_IDLE    = 14;        // when not moving and not shooting
+const HEAT_COOL_MOVE    = 6;         // when moving but not shooting
+const HEAT_OVERHEAT_GRACE = 1.6;     // s above 100 before explosion
+
+// Heat zones — used for color, score multiplier, speed, etc.
+const ZONE_LOW   = 25;
+const ZONE_MID   = 60;
+const ZONE_HIGH  = 85;
+function heatZone(h) {
+  if (h < ZONE_LOW)  return 'low';
+  if (h < ZONE_MID)  return 'mid';
+  if (h < ZONE_HIGH) return 'high';
+  return 'crit';
+}
+function heatMult(h) {
+  return h < ZONE_LOW ? 1.0 :
+         h < ZONE_MID ? 1.5 :
+         h < ZONE_HIGH ? 2.0 :
+                         3.0;
+}
+
+// Enemies
+const ENEMY_BASE = {
+  frag:  { r: 12, hp: 1, speed: 75,  color: '--enemy-frag',  score: 100, heat: 0   },
+  heavy: { r: 22, hp: 3, speed: 55,  color: '--enemy-heavy', score: 300, heat: 0   },
+  split: { r: 14, hp: 1, speed: 80,  color: '--enemy-split', score: 120, heat: 0   },
+  track: { r: 11, hp: 1, speed: 90,  color: '--enemy-track', score: 180, heat: 0,
+           turnRate: 1.4 },
+  mini:  { r:  7, hp: 1, speed: 110, color: '--enemy-split', score: 60,  heat: 0   },
+};
+
+const SPAWN_BASE_INTERVAL = 1.6;
+const SPAWN_MIN_INTERVAL  = 0.42;
+const SPAWN_RAMP          = 0.018;
+
+// Pickups
+const PICKUP_INTERVAL = 18;          // s between pickup spawns
+const PICKUP_LIFETIME = 9.5;
+const SHIELD_DUR      = 4.5;
+
+// ---------- State ----------
+const state = {
+  mode:      'menu',
+  elapsed:   0,
+  score:     0,
+  kills:     0,
+  best:      Number(localStorage.getItem('oa.best') || 0),
+
+  // Player
+  px:        W / 2,
+  py:        H / 2,
+  vx:        0,
+  vy:        0,
+  facing:    -Math.PI / 2,    // up
+  shotCD:    0,
+  dashT:     0,                // remaining dash duration
+  dashVx:    0,
+  dashVy:    0,
+  dashCD:    0,
+  iframeT:   0,
+  shieldT:   0,
+
+  // Inputs
+  inUp: false, inDown: false, inLeft: false, inRight: false,
+  inShoot: false,
+  // Touch direction held — overrides keys when nonzero
+  touchVx: 0, touchVy: 0,
+
+  // Entities
+  bullets:   [],
+  enemies:   [],
+  pickups:   [],
+  particles: [],
+
+  // Heat
+  heat:      0,
+  overheatT: 0,                // counts up while heat >= MAX
+
+  // Spawn timers
+  nextSpawn:  SPAWN_BASE_INTERVAL,
+  nextPickup: PICKUP_INTERVAL,
+
+  // Cosmetic
+  shakeT:    0,
+  flashT:    0,
+};
+
+// ---------- Reset ----------
+function resetState() {
+  state.mode    = 'playing';
+  state.elapsed = 0;
+  state.score   = 0;
+  state.kills   = 0;
+  state.px = W / 2; state.py = H / 2;
+  state.vx = 0; state.vy = 0;
+  state.facing = -Math.PI / 2;
+  state.shotCD = 0;
+  state.dashT = 0; state.dashVx = 0; state.dashVy = 0;
+  state.dashCD = 0; state.iframeT = 0; state.shieldT = 0;
+  state.inUp = state.inDown = state.inLeft = state.inRight = false;
+  state.inShoot = false;
+  state.touchVx = 0; state.touchVy = 0;
+  state.bullets.length = 0;
+  state.enemies.length = 0;
+  state.pickups.length = 0;
+  state.particles.length = 0;
+  state.heat = 0;
+  state.overheatT = 0;
+  state.nextSpawn  = SPAWN_BASE_INTERVAL;
+  state.nextPickup = PICKUP_INTERVAL;
+  state.shakeT = 0;
+  state.flashT = 0;
+  updateHUD();
+}
+
+// ---------- Input ----------
+addEventListener('keydown', e => {
+  if (e.repeat) return;
+  const k = e.key;
+  const lk = k.toLowerCase();
+  if      (lk === 'w' || k === 'ArrowUp')    state.inUp    = true;
+  else if (lk === 's' || k === 'ArrowDown')  state.inDown  = true;
+  else if (lk === 'a' || k === 'ArrowLeft')  state.inLeft  = true;
+  else if (lk === 'd' || k === 'ArrowRight') state.inRight = true;
+  else if (k === ' ' || k === 'Spacebar') {
+    if (state.mode === 'menu' || state.mode === 'gameover') startGame();
+    else if (state.mode === 'paused') { state.mode = 'playing'; hideOverlays(); }
+    else state.inShoot = true;
+    e.preventDefault();
+    sfx.init();
+  } else if (k === 'Shift') {
+    if (state.mode === 'playing') triggerDash();
+  } else if (lk === 'p' && state.mode !== 'menu') {
+    if (state.mode === 'playing')      { state.mode = 'paused';  showOverlay('pauseScreen'); }
+    else if (state.mode === 'paused')  { state.mode = 'playing'; hideOverlays(); }
+  } else if (lk === 'm') {
+    const muted = sfx.toggle();
+    document.getElementById('muteBtnMenu').textContent = muted ? '♪ SOUND OFF' : '♪ SOUND ON';
+  } else if (lk === 'r' && state.mode !== 'menu') {
+    startGame();
+  }
+  if (lk === 'w' || lk === 'a' || lk === 's' || lk === 'd' ||
+      k === 'ArrowUp' || k === 'ArrowDown' || k === 'ArrowLeft' || k === 'ArrowRight') {
+    e.preventDefault();
+  }
+});
+
+addEventListener('keyup', e => {
+  const k = e.key;
+  const lk = k.toLowerCase();
+  if      (lk === 'w' || k === 'ArrowUp')    state.inUp    = false;
+  else if (lk === 's' || k === 'ArrowDown')  state.inDown  = false;
+  else if (lk === 'a' || k === 'ArrowLeft')  state.inLeft  = false;
+  else if (lk === 'd' || k === 'ArrowRight') state.inRight = false;
+  else if (k === ' ' || k === 'Spacebar')    state.inShoot = false;
+});
+
+// Touch buttons
+function bindHold(btn, fn) {
+  if (!btn) return;
+  const down = (e) => { fn(true);  e.preventDefault(); sfx.init(); };
+  const up   = ()   => { fn(false); };
+  btn.addEventListener('touchstart',  down, { passive: false });
+  btn.addEventListener('touchend',    up);
+  btn.addEventListener('touchcancel', up);
+  btn.addEventListener('mousedown',   down);
+  btn.addEventListener('mouseup',     up);
+  btn.addEventListener('mouseleave',  up);
+}
+bindHold(document.getElementById('tUp'),    v => state.touchVy = v ? -1 : 0);
+bindHold(document.getElementById('tDown'),  v => state.touchVy = v ? +1 : 0);
+bindHold(document.getElementById('tLeft'),  v => state.touchVx = v ? -1 : 0);
+bindHold(document.getElementById('tRight'), v => state.touchVx = v ? +1 : 0);
+bindHold(document.getElementById('tShoot'), v => state.inShoot = v);
+function bindTap(btn, fn) {
+  if (!btn) return;
+  const trig = (e) => { fn(); e.preventDefault(); sfx.init(); };
+  btn.addEventListener('touchstart', trig, { passive: false });
+  btn.addEventListener('mousedown',  trig);
+}
+bindTap(document.getElementById('tDash'), () => { if (state.mode === 'playing') triggerDash(); });
+
+// Buttons
+document.getElementById('startBtn').addEventListener('click', startGame);
+document.getElementById('retryBtn').addEventListener('click', startGame);
+document.getElementById('resumeBtn').addEventListener('click', () => {
+  state.mode = 'playing'; hideOverlays();
+});
+document.getElementById('restartBtnPause').addEventListener('click', startGame);
+document.getElementById('muteBtnMenu').addEventListener('click', () => {
+  const muted = sfx.toggle();
+  document.getElementById('muteBtnMenu').textContent = muted ? '♪ SOUND OFF' : '♪ SOUND ON';
+});
+
+// ---------- Lifecycle ----------
+function startGame() {
+  resetState();
+  hideOverlays();
+  last = performance.now();
+  sfx.init();
+}
+
+function endGame(reason) {
+  if (state.mode === 'gameover') return;
+  state.mode = 'gameover';
+  const finalScore = Math.floor(state.score);
+  const isBest = finalScore > state.best;
+  if (isBest) {
+    state.best = finalScore;
+    localStorage.setItem('oa.best', String(finalScore));
+  }
+  document.getElementById('finalScore').textContent = pad(finalScore, 6);
+  document.getElementById('finalBest').textContent  = pad(state.best, 6);
+  document.getElementById('finalKills').textContent = String(state.kills);
+  document.getElementById('newBestMsg').style.display = isBest ? 'block' : 'none';
+  // Custom title/text per death cause
+  const titleEl = document.getElementById('gameoverTitle');
+  const detailEl = document.getElementById('gameoverDetail');
+  if (reason === 'overheat') {
+    titleEl.textContent = 'OVERHEATED';
+    detailEl.textContent = 'The chassis cooked itself.';
+  } else {
+    titleEl.textContent = 'DESTROYED';
+    detailEl.textContent = 'The swarm got through.';
+  }
+  if (window.NostalgiaScores) {
+    window.NostalgiaScores.submitAndReport(
+      'overheat-arena', finalScore, document.getElementById('scoreStatus')
+    );
+  }
+  showOverlay('gameoverScreen');
+  if (reason === 'overheat') overheatSfx();
+  else                       deathSfx();
+  state.shakeT = 0.7;
+  state.flashT = 0.4;
+  // Big debris burst
+  spawnBurst(state.px, state.py, '--player-hot', 30);
+}
+
+// ---------- Spawning ----------
+function spawnEnemy() {
+  const t = state.elapsed;
+  const pool = ['frag', 'frag'];          // fragments common at all times
+  if (t >=  8) pool.push('heavy');
+  if (t >= 16) pool.push('split');
+  if (t >= 24) pool.push('track');
+  if (t >= 35) pool.push('frag');         // bias up frags later too
+  const kind = pool[randInt(0, pool.length - 1)];
+  const base = ENEMY_BASE[kind];
+
+  // Spawn from a random arena edge; pick velocity vector toward the
+  // player's current position (or a slight overshoot for variety).
+  const edge = randInt(0, 3);
+  let x, y;
+  if (edge === 0)      { x = rand(0, W); y = -base.r; }
+  else if (edge === 1) { x = W + base.r; y = rand(0, H); }
+  else if (edge === 2) { x = rand(0, W); y = H + base.r; }
+  else                 { x = -base.r;    y = rand(0, H); }
+  const dx = state.px - x, dy = state.py - y;
+  const len = Math.hypot(dx, dy) || 1;
+  const sp = base.speed * rand(0.85, 1.15);
+  state.enemies.push({
+    kind, x, y, r: base.r, hp: base.hp,
+    vx: (dx / len) * sp,
+    vy: (dy / len) * sp,
+    speed: sp,
+    color: base.color,
+    score: base.score,
+    turnRate: base.turnRate,
+  });
+}
+
+function spawnPickup() {
+  // Two pickup kinds: 'cool' (instant heat dump) and 'shield' (rare).
+  const kind = Math.random() < 0.7 ? 'cool' : 'shield';
+  state.pickups.push({
+    kind,
+    x: rand(40, W - 40),
+    y: rand(40, H - 40),
+    r: 11,
+    life: PICKUP_LIFETIME,
+    bob: Math.random() * Math.PI * 2,
+  });
+}
+
+// ---------- Dash + shoot ----------
+function triggerDash() {
+  if (state.dashT > 0 || state.dashCD > 0) return;
+  // Use facing for dash direction so a stationary player can still
+  // dash in their last-aimed direction.
+  const dx = Math.cos(state.facing);
+  const dy = Math.sin(state.facing);
+  const v  = DASH_DIST / DASH_DUR;
+  state.dashVx = dx * v;
+  state.dashVy = dy * v;
+  state.dashT  = DASH_DUR;
+  state.dashCD = DASH_COOLDOWN;
+  state.iframeT = DASH_IFRAME;
+  state.heat = Math.min(HEAT_MAX + 5, state.heat + HEAT_PER_DASH);
+  dashSfx();
+  spawnBurst(state.px, state.py, '--player-warm', 8);
+}
+
+function fireShot() {
+  state.shotCD = currentShotCooldown();
+  // Slight aim wobble at high heat
+  const z = heatZone(state.heat);
+  const wobble = z === 'high' ? rand(-0.06, 0.06)
+              : z === 'crit' ? rand(-0.12, 0.12)
+              : 0;
+  const a = state.facing + wobble;
+  const sp = BULLET_SPEED;
+  state.bullets.push({
+    x: state.px + Math.cos(a) * (PLAYER_R + 4),
+    y: state.py + Math.sin(a) * (PLAYER_R + 4),
+    vx: Math.cos(a) * sp,
+    vy: Math.sin(a) * sp,
+    life: BULLET_LIFE,
+  });
+  state.heat = Math.min(HEAT_MAX + 5, state.heat + HEAT_PER_SHOT);
+  shootSfx();
+}
+
+function currentShotCooldown() {
+  // Linear ease from base → hot across the heat range. High heat
+  // gives faster fire (the spec calls this "increased power").
+  const t = clamp(state.heat / HEAT_MAX, 0, 1);
+  return SHOT_BASE_CD + (SHOT_HOT_CD - SHOT_BASE_CD) * t;
+}
+
+function currentSpeed() {
+  const t = clamp(state.heat / HEAT_MAX, 0, 1);
+  return PLAYER_BASE_SP + (PLAYER_HOT_SP - PLAYER_BASE_SP) * t;
+}
+
+// ---------- Update ----------
+function update(dt) {
+  if (state.mode !== 'playing') return;
+  state.elapsed += dt;
+
+  // ---- Movement input ----
+  let mx = 0, my = 0;
+  if (state.inLeft)  mx -= 1;
+  if (state.inRight) mx += 1;
+  if (state.inUp)    my -= 1;
+  if (state.inDown)  my += 1;
+  // Touch overrides if held
+  if (state.touchVx) mx = state.touchVx;
+  if (state.touchVy) my = state.touchVy;
+  const moving = (mx !== 0 || my !== 0);
+  if (moving) {
+    const len = Math.hypot(mx, my);
+    mx /= len; my /= len;
+    const sp = currentSpeed();
+    state.vx = mx * sp;
+    state.vy = my * sp;
+    state.facing = Math.atan2(my, mx);
+  } else {
+    state.vx = 0; state.vy = 0;
+  }
+
+  // ---- Apply movement (or dash) ----
+  if (state.dashT > 0) {
+    state.px += state.dashVx * dt;
+    state.py += state.dashVy * dt;
+    state.dashT = Math.max(0, state.dashT - dt);
+  } else {
+    state.px += state.vx * dt;
+    state.py += state.vy * dt;
+  }
+  // Clamp to arena
+  state.px = clamp(state.px, PLAYER_R, W - PLAYER_R);
+  state.py = clamp(state.py, PLAYER_R, H - PLAYER_R);
+
+  // ---- Shot cooldown / fire ----
+  state.shotCD = Math.max(0, state.shotCD - dt);
+  if (state.inShoot && state.shotCD <= 0) fireShot();
+
+  // ---- Cooldowns ----
+  if (state.dashCD  > 0) state.dashCD  = Math.max(0, state.dashCD  - dt);
+  if (state.iframeT > 0) state.iframeT = Math.max(0, state.iframeT - dt);
+  if (state.shieldT > 0) state.shieldT = Math.max(0, state.shieldT - dt);
+
+  // ---- Heat dynamics ----
+  // Active actions add heat; inaction lets it bleed off. When the
+  // player is over MAX, the overheat grace counter ticks toward
+  // explosion. Touching a 'cool' pickup resets it.
+  if (moving) state.heat += HEAT_PER_SEC_MOVE * dt;
+  if (!state.inShoot) {
+    const cool = moving ? HEAT_COOL_MOVE : HEAT_COOL_IDLE;
+    state.heat = Math.max(0, state.heat - cool * dt);
+  }
+  state.heat = Math.max(0, state.heat);
+  if (state.heat >= HEAT_MAX) {
+    state.overheatT += dt;
+    if (state.overheatT >= HEAT_OVERHEAT_GRACE) return endGame('overheat');
+  } else {
+    state.overheatT = Math.max(0, state.overheatT - dt * 2);
+  }
+
+  // ---- Bullets ----
+  for (let i = state.bullets.length - 1; i >= 0; i--) {
+    const b = state.bullets[i];
+    b.x += b.vx * dt; b.y += b.vy * dt;
+    b.life -= dt;
+    if (b.life <= 0 || b.x < -8 || b.x > W + 8 || b.y < -8 || b.y > H + 8) {
+      state.bullets.splice(i, 1);
+    }
+  }
+
+  // ---- Enemies ----
+  for (let i = state.enemies.length - 1; i >= 0; i--) {
+    const e = state.enemies[i];
+    if (e.kind === 'track' && e.turnRate) {
+      // Steer velocity gently toward player's current position
+      const tx = state.px - e.x, ty = state.py - e.y;
+      const targetA = Math.atan2(ty, tx);
+      const curA = Math.atan2(e.vy, e.vx);
+      let dA = ((targetA - curA + Math.PI) % (Math.PI * 2)) - Math.PI;
+      const max = e.turnRate * dt;
+      dA = clamp(dA, -max, max);
+      const newA = curA + dA;
+      e.vx = Math.cos(newA) * e.speed;
+      e.vy = Math.sin(newA) * e.speed;
+    }
+    e.x += e.vx * dt; e.y += e.vy * dt;
+    // Cull enemies that escaped offscreen far enough — they shouldn't,
+    // since they're aimed inward, but we guard anyway.
+    if (e.x < -200 || e.x > W + 200 || e.y < -200 || e.y > H + 200) {
+      state.enemies.splice(i, 1); continue;
+    }
+  }
+
+  // ---- Bullet ↔ enemy hits ----
+  for (let i = state.bullets.length - 1; i >= 0; i--) {
+    const b = state.bullets[i];
+    let hit = false;
+    for (let j = state.enemies.length - 1; j >= 0; j--) {
+      const e = state.enemies[j];
+      const dx = b.x - e.x, dy = b.y - e.y;
+      if (dx*dx + dy*dy < (e.r + BULLET_R) * (e.r + BULLET_R)) {
+        hit = true;
+        e.hp -= 1;
+        hitSfx();
+        spawnBurst(b.x, b.y, e.color, 6);
+        if (e.hp <= 0) onKill(e, j);
+        break;
+      }
+    }
+    if (hit) state.bullets.splice(i, 1);
+  }
+
+  // ---- Player ↔ enemy collisions ----
+  if (state.iframeT <= 0 && state.shieldT <= 0) {
+    for (const e of state.enemies) {
+      const dx = e.x - state.px, dy = e.y - state.py;
+      if (dx*dx + dy*dy < (e.r + PLAYER_R - 2) * (e.r + PLAYER_R - 2)) {
+        return endGame('collision');
+      }
+    }
+  } else if (state.shieldT > 0) {
+    // Shield absorbs one hit, then fizzles.
+    for (let j = state.enemies.length - 1; j >= 0; j--) {
+      const e = state.enemies[j];
+      const dx = e.x - state.px, dy = e.y - state.py;
+      if (dx*dx + dy*dy < (e.r + PLAYER_R) * (e.r + PLAYER_R)) {
+        state.shieldT = 0;
+        spawnBurst(state.px, state.py, '--pickup-shield', 16);
+        // Destroy the enemy that struck the shield
+        onKill(e, j);
+        break;
+      }
+    }
+  }
+
+  // ---- Pickup pickup ----
+  for (let i = state.pickups.length - 1; i >= 0; i--) {
+    const p = state.pickups[i];
+    p.life -= dt;
+    p.bob += dt * 3;
+    if (p.life <= 0) { state.pickups.splice(i, 1); continue; }
+    const dx = p.x - state.px, dy = p.y - state.py;
+    if (dx*dx + dy*dy < (p.r + PLAYER_R) * (p.r + PLAYER_R)) {
+      if (p.kind === 'cool') {
+        state.heat = 0;
+        state.overheatT = 0;
+        spawnBurst(p.x, p.y, '--pickup-cool', 14);
+      } else if (p.kind === 'shield') {
+        state.shieldT = SHIELD_DUR;
+        spawnBurst(p.x, p.y, '--pickup-shield', 14);
+      }
+      pickupSfx();
+      state.pickups.splice(i, 1);
+    }
+  }
+
+  // ---- Spawn timers ----
+  state.nextSpawn -= dt;
+  if (state.nextSpawn <= 0) {
+    spawnEnemy();
+    const interval = clamp(SPAWN_BASE_INTERVAL - state.elapsed * SPAWN_RAMP,
+                           SPAWN_MIN_INTERVAL, SPAWN_BASE_INTERVAL);
+    state.nextSpawn = interval + rand(-0.15, 0.25);
+  }
+  state.nextPickup -= dt;
+  if (state.nextPickup <= 0) {
+    spawnPickup();
+    state.nextPickup = PICKUP_INTERVAL + rand(-3, 4);
+  }
+
+  // ---- Particles ----
+  for (let i = state.particles.length - 1; i >= 0; i--) {
+    const p = state.particles[i];
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.vx *= 0.92;
+    p.vy *= 0.92;
+    p.life -= dt;
+    if (p.life <= 0) state.particles.splice(i, 1);
+  }
+
+  // ---- Score: per-second survival ----
+  state.score += 5 * heatMult(state.heat) * dt;
+
+  // Decay shake / flash
+  if (state.shakeT > 0) state.shakeT = Math.max(0, state.shakeT - dt);
+  if (state.flashT > 0) state.flashT = Math.max(0, state.flashT - dt);
+
+  updateHUD();
+}
+
+function onKill(enemy, idx) {
+  state.enemies.splice(idx, 1);
+  state.kills++;
+  state.score += enemy.score * heatMult(state.heat);
+  killSfx();
+  spawnBurst(enemy.x, enemy.y, enemy.color, 12);
+  // Split fragments shed two mini-frags on death
+  if (enemy.kind === 'split') {
+    for (let k = 0; k < 2; k++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = ENEMY_BASE.mini.speed * rand(0.8, 1.2);
+      state.enemies.push({
+        kind:  'mini',
+        x: enemy.x, y: enemy.y,
+        vx: Math.cos(a) * sp,
+        vy: Math.sin(a) * sp,
+        speed: sp,
+        r:     ENEMY_BASE.mini.r,
+        hp:    ENEMY_BASE.mini.hp,
+        color: ENEMY_BASE.mini.color,
+        score: ENEMY_BASE.mini.score,
+      });
+    }
+  }
+}
+
+function spawnBurst(x, y, col, n) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const sp = rand(80, 240);
+    state.particles.push({
+      x, y,
+      vx: Math.cos(a) * sp,
+      vy: Math.sin(a) * sp,
+      life: 0.45 + Math.random() * 0.25,
+      max:  0.7,
+      glyph: Math.random() < 0.5 ? '0' : '1',
+      color: col,
+    });
+  }
+}
+
+// ---------- HUD ----------
+function updateHUD() {
+  hudScore.textContent  = pad(Math.floor(state.score), 6);
+  hudTime.textContent   = state.elapsed.toFixed(1) + 's';
+  hudBest.textContent   = pad(state.best, 6);
+  hudKills.textContent  = String(state.kills);
+  hudHeatVal.textContent = Math.floor(state.heat) + '%';
+  hudMult.textContent   = '×' + heatMult(state.heat).toFixed(1);
+  // Color-code HEAT label by zone
+  const z = heatZone(state.heat);
+  hudHeat.style.color =
+    z === 'low'  ? 'var(--heat-cool)' :
+    z === 'mid'  ? 'var(--heat-warm)' :
+    z === 'high' ? 'var(--heat-hot)'  :
+                   'var(--heat-crit)';
+}
+
+// ---------- Render ----------
+function render() {
+  let shx = 0, shy = 0;
+  // Heat-driven shake amplitude — barely any at low, noticeable at crit
+  const heatShake = state.heat >= ZONE_HIGH ? (state.heat - ZONE_HIGH) / 30 : 0;
+  if (state.shakeT > 0) {
+    shx = (Math.random() - 0.5) * 6;
+    shy = (Math.random() - 0.5) * 4;
+  } else if (heatShake > 0) {
+    shx = (Math.random() - 0.5) * heatShake * 4;
+    shy = (Math.random() - 0.5) * heatShake * 4;
+  }
+  ctx.save();
+  ctx.translate(shx, shy);
+
+  drawBackground();
+  drawGrid();
+  drawPickups();
+  drawEnemies();
+  drawBullets();
+  drawPlayer();
+  drawParticles();
+  drawHeatBar();
+  drawHeatTint();
+  drawFlash();
+  drawScanlines();
+
+  ctx.restore();
+}
+
+function drawBackground() {
+  // Radial-ish dark wash so center reads brighter
+  const grad = ctx.createRadialGradient(W / 2, H / 2, 60, W / 2, H / 2, W * 0.7);
+  grad.addColorStop(0, color('--bg-mid'));
+  grad.addColorStop(1, color('--bg-deep'));
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+
+  // Stars
+  ctx.fillStyle = color('--star');
+  for (let i = 0; i < 50; i++) {
+    const seed = i * 53.13;
+    const x = (seed * 97) % W;
+    const y = (seed * 41) % H;
+    ctx.globalAlpha = 0.25 + (i % 5) * 0.08;
+    ctx.fillRect(x | 0, y | 0, i % 7 === 0 ? 2 : 1, 1);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawGrid() {
+  // Static grid lines — every 60px.
+  ctx.strokeStyle = color('--grid-line');
+  ctx.globalAlpha = 0.55;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let x = 60; x < W; x += 60) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
+  for (let y = 60; y < H; y += 60) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
+  ctx.stroke();
+  // Frame
+  ctx.globalAlpha = 0.9;
+  ctx.strokeStyle = color('--grid-line-2');
+  ctx.strokeRect(2, 2, W - 4, H - 4);
+  ctx.globalAlpha = 1;
+}
+
+function drawPickups() {
+  for (const p of state.pickups) {
+    const col = color(p.kind === 'cool' ? '--pickup-cool' : '--pickup-shield');
+    const yBob = p.y + Math.sin(p.bob) * 4;
+    // Aura
+    ctx.globalAlpha = 0.3 + Math.sin(p.bob * 2) * 0.12;
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.arc(p.x, yBob, p.r + 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    // Body
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(p.x, yBob, p.r, 0, Math.PI * 2);
+    ctx.stroke();
+    // Glyph
+    ctx.fillStyle = col;
+    ctx.font = "10px 'Press Start 2P', monospace";
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(p.kind === 'cool' ? '❄' : 'S', p.x, yBob + 1);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    // Life bar (only if life is short)
+    if (p.life < 3) {
+      const w = p.r * 2;
+      ctx.fillStyle = col;
+      ctx.globalAlpha = 0.6;
+      ctx.fillRect(p.x - p.r, yBob + p.r + 4, (p.life / 3) * w, 2);
+      ctx.globalAlpha = 1;
+    }
+  }
+}
+
+function drawEnemies() {
+  for (const e of state.enemies) {
+    const col = color(e.color);
+    if (e.kind === 'frag' || e.kind === 'mini') {
+      // Triangle shard
+      ctx.fillStyle = col;
+      const a = Math.atan2(e.vy, e.vx);
+      ctx.beginPath();
+      ctx.moveTo(e.x + Math.cos(a) * e.r, e.y + Math.sin(a) * e.r);
+      ctx.lineTo(e.x + Math.cos(a + 2.4) * e.r, e.y + Math.sin(a + 2.4) * e.r);
+      ctx.lineTo(e.x + Math.cos(a - 2.4) * e.r, e.y + Math.sin(a - 2.4) * e.r);
+      ctx.closePath();
+      ctx.fill();
+    } else if (e.kind === 'heavy') {
+      // Layered hex with hp pips
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2 + state.elapsed * 0.6;
+        const px = e.x + Math.cos(a) * e.r;
+        const py = e.y + Math.sin(a) * e.r;
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fill();
+      // Inner core
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, e.r * 0.55, 0, Math.PI * 2);
+      ctx.fill();
+      // hp pips
+      ctx.fillStyle = '#fff';
+      for (let i = 0; i < e.hp; i++) {
+        ctx.fillRect(e.x - 6 + i * 4, e.y - 1, 2, 2);
+      }
+    } else if (e.kind === 'split') {
+      // Diamond with pulsing inner ring
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.moveTo(e.x, e.y - e.r);
+      ctx.lineTo(e.x + e.r, e.y);
+      ctx.lineTo(e.x, e.y + e.r);
+      ctx.lineTo(e.x - e.r, e.y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(e.x - 1, e.y - 1, 2, 2);
+    } else if (e.kind === 'track') {
+      // Rotating arrow head
+      ctx.fillStyle = col;
+      const a = Math.atan2(e.vy, e.vx);
+      ctx.beginPath();
+      ctx.moveTo(e.x + Math.cos(a) * e.r, e.y + Math.sin(a) * e.r);
+      ctx.lineTo(e.x + Math.cos(a + 2.0) * e.r * 0.7, e.y + Math.sin(a + 2.0) * e.r * 0.7);
+      ctx.lineTo(e.x + Math.cos(a + Math.PI) * e.r * 0.4, e.y + Math.sin(a + Math.PI) * e.r * 0.4);
+      ctx.lineTo(e.x + Math.cos(a - 2.0) * e.r * 0.7, e.y + Math.sin(a - 2.0) * e.r * 0.7);
+      ctx.closePath();
+      ctx.fill();
+      // Bright dot
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(e.x - 1, e.y - 1, 2, 2);
+    }
+  }
+}
+
+function drawBullets() {
+  for (const b of state.bullets) {
+    // Trail
+    const tx = b.x - b.vx * 0.025;
+    const ty = b.y - b.vy * 0.025;
+    ctx.strokeStyle = color('--bullet');
+    ctx.globalAlpha = 0.5;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(tx, ty);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    // Head
+    ctx.fillStyle = color('--bullet');
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, BULLET_R, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function playerColorByHeat() {
+  // Lerp between zone anchor colors so the chassis warms up smoothly.
+  const t = clamp(state.heat / HEAT_MAX, 0, 1);
+  if      (t < 0.25) return color('--player-cool');
+  else if (t < 0.6)  return color('--player-mid');
+  else if (t < 0.85) return color('--player-warm');
+  else               return color('--player-hot');
+}
+
+function drawPlayer() {
+  const sx = state.px, sy = state.py;
+  const a  = state.facing;
+  const r  = PLAYER_R;
+  const col = playerColorByHeat();
+  // Shield aura
+  if (state.shieldT > 0) {
+    ctx.strokeStyle = color('--pickup-shield');
+    ctx.lineWidth = 2;
+    ctx.globalAlpha = 0.7 + Math.sin(state.elapsed * 8) * 0.25;
+    ctx.beginPath();
+    ctx.arc(sx, sy, r + 6, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  // Glow
+  ctx.globalAlpha = 0.35;
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.arc(sx, sy, r + 3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  // Triangle ship pointing in facing direction
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.moveTo(sx + Math.cos(a) * (r + 2),         sy + Math.sin(a) * (r + 2));
+  ctx.lineTo(sx + Math.cos(a + 2.5) * r,         sy + Math.sin(a + 2.5) * r);
+  ctx.lineTo(sx + Math.cos(a + Math.PI) * r * 0.6, sy + Math.sin(a + Math.PI) * r * 0.6);
+  ctx.lineTo(sx + Math.cos(a - 2.5) * r,         sy + Math.sin(a - 2.5) * r);
+  ctx.closePath();
+  ctx.fill();
+  // Core dot
+  ctx.fillStyle = color('--player-core');
+  ctx.fillRect(sx - 1, sy - 1, 2, 2);
+  // I-frame flicker
+  if (state.iframeT > 0 && ((state.elapsed * 30) | 0) % 2 === 0) {
+    ctx.globalAlpha = 0.6;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(sx, sy, r + 1, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawParticles() {
+  ctx.font = "9px 'JetBrains Mono', monospace";
+  ctx.textBaseline = 'top';
+  for (const p of state.particles) {
+    ctx.globalAlpha = Math.max(0, p.life / p.max);
+    ctx.fillStyle = color(p.color);
+    ctx.fillText(p.glyph, p.x, p.y);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawHeatBar() {
+  // In-canvas heat meter so the player can read it without flicking
+  // their eyes to the HUD bar above. Sits along the top edge.
+  const barX = 10, barY = 10, barW = W - 20, barH = 10;
+  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  ctx.fillRect(barX, barY, barW, barH);
+  const fillW = (state.heat / HEAT_MAX) * barW;
+  // Gradient across the four zones
+  const grad = ctx.createLinearGradient(barX, 0, barX + barW, 0);
+  grad.addColorStop(0,    color('--heat-cool'));
+  grad.addColorStop(ZONE_LOW / HEAT_MAX,  color('--heat-warm'));
+  grad.addColorStop(ZONE_MID / HEAT_MAX,  color('--heat-hot'));
+  grad.addColorStop(ZONE_HIGH / HEAT_MAX, color('--heat-crit'));
+  grad.addColorStop(1,    color('--heat-crit'));
+  ctx.fillStyle = grad;
+  ctx.fillRect(barX, barY, fillW, barH);
+  // Zone tick marks
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+  ctx.beginPath();
+  for (const z of [ZONE_LOW, ZONE_MID, ZONE_HIGH]) {
+    const x = barX + (z / HEAT_MAX) * barW;
+    ctx.moveTo(x | 0, barY);
+    ctx.lineTo(x | 0, barY + barH);
+  }
+  ctx.stroke();
+  // Frame
+  ctx.strokeStyle = color('--grid-line-2');
+  ctx.strokeRect(barX, barY, barW, barH);
+  // CRITICAL warning text
+  if (state.heat >= ZONE_HIGH) {
+    ctx.fillStyle = color('--heat-crit');
+    ctx.font = "10px 'Press Start 2P', monospace";
+    ctx.globalAlpha = 0.5 + Math.sin(state.elapsed * 14) * 0.5;
+    ctx.fillText('!! OVERHEAT WARNING !!', barX + 6, barY + barH + 4);
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawHeatTint() {
+  // Subtle full-screen wash that warms the canvas as heat rises.
+  // Below ZONE_MID it's invisible; from there it ramps to a hot
+  // pink-orange overlay at critical so the danger is felt.
+  if (state.heat < ZONE_MID) return;
+  const t = clamp((state.heat - ZONE_MID) / (HEAT_MAX - ZONE_MID), 0, 1);
+  ctx.globalAlpha = 0.10 + t * 0.18;
+  ctx.fillStyle = color('--heat-crit');
+  ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = 1;
+}
+
+function drawFlash() {
+  if (state.flashT <= 0) return;
+  const t = state.flashT / 0.4;
+  ctx.globalAlpha = t * 0.5;
+  ctx.fillStyle = color('--player-hot');
+  ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = 1;
+}
+
+function drawScanlines() {
+  ctx.globalAlpha = 0.05;
+  ctx.fillStyle = '#ffffff';
+  for (let y = 0; y < H; y += 3) ctx.fillRect(0, y, W, 1);
+  ctx.globalAlpha = 1;
+}
+
+// ---------- Main loop ----------
+let last = performance.now();
+const MAX_DT = 1 / 30;
+function frame(now) {
+  let dt = (now - last) / 1000;
+  last = now;
+  if (dt > MAX_DT) dt = MAX_DT;
+  update(dt);
+  render();
+  requestAnimationFrame(frame);
+}
+
+resetState();
+state.mode = 'menu';
+showOverlay('startScreen');
+updateHUD();
+requestAnimationFrame(frame);
+
+})();
+</script>
+</body>
+</html>

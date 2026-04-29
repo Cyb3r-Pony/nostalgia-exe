@@ -1,0 +1,1090 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>Quantum SuperPosition — Nostalgia.exe</title>
+<link rel="icon" type="image/svg+xml" href="../favicon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=Press+Start+2P&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="shared/arcade.css" />
+<style>
+  /* ==========================================================
+     QUANTUM SUPERPOSITION — palette is split across two
+     "eigenstates": cyan/blue for |A⟩ and magenta/purple for |B⟩.
+     The active phase tints the canvas wash so your eyes can
+     read which reality you're occupying without looking at the
+     HUD ket indicator.
+     ========================================================== */
+  :root {
+    --phase-a:      #5ff0c9;
+    --phase-a-glow: #b5ffe6;
+    --phase-a-deep: #155f4a;
+    --phase-b:      #ff4fa1;
+    --phase-b-glow: #ffa8d1;
+    --phase-b-deep: #6a1850;
+    --qubit-core:   #ffffff;
+    --qubit-trail:  #ffd86b;
+    --schrod:       #b388ff;
+    --grid-line:    #2a1a6a;
+    --grid-line-2:  #3a2390;
+    --bg-deep:      #060218;
+    --bg-mid:       #160a36;
+    --star:         #6b5ab8;
+    --warning:      #ff7a30;
+  }
+  [data-theme="light"] {
+    --phase-a:      #1aa88a;
+    --phase-a-glow: #5fd0b0;
+    --phase-a-deep: #0a5a48;
+    --phase-b:      #c03a7a;
+    --phase-b-glow: #e879ae;
+    --phase-b-deep: #5a1a3a;
+    --qubit-core:   #1a1a28;
+    --qubit-trail:  #b88500;
+    --schrod:       #7a58b0;
+    --grid-line:    #b8a0d0;
+    --grid-line-2:  #a895c0;
+    --bg-deep:      #d8c8e8;
+    --bg-mid:       #c8b4dc;
+    --star:         #6e5890;
+    --warning:      #c84810;
+  }
+
+  canvas { max-width: 100%; max-height: 100%; image-rendering: pixelated; cursor: pointer; }
+
+  .controls-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 6px 14px;
+    margin: 18px 0 22px;
+    text-align: left;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .controls-grid kbd {
+    background: var(--panel-2);
+    border: 1px solid var(--text);
+    padding: 2px 6px;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 9px;
+    min-width: 44px;
+    text-align: center;
+  }
+
+  /* Eigenstate legend uses bra-ket notation with the same
+     enlarged-icon pattern as Overheat Arena and Signal Jam. */
+  .qm-legend {
+    display: grid;
+    grid-template-columns: 36px 1fr;
+    gap: 8px 14px;
+    align-items: center;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    margin-bottom: 22px;
+  }
+  .qm-legend span:nth-child(odd) {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 22px;
+    line-height: 1;
+    text-align: center;
+    text-shadow: 0 0 6px currentColor;
+  }
+  .qm-legend .ket { letter-spacing: -1px; }
+
+  /* HUD label colored by the active phase ket indicator */
+  .ket-a { color: var(--phase-a); }
+  .ket-b { color: var(--phase-b); }
+</style>
+</head>
+<body>
+
+<div class="bg-grid"></div>
+<div class="scanlines"></div>
+
+<header class="topbar">
+  <a href="../index.html" class="back">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    EXIT
+  </a>
+  <div class="title-tag">QUANTUM SUPERPOSITION<span class="ver">v1.0.0 // |ψ⟩.EXE</span></div>
+  <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme"></button>
+</header>
+
+<section class="hud" id="hud">
+  <div class="hud-col">
+    <div class="hud-stat score">ψ-SCORE<strong id="hudScore">000000</strong></div>
+    <div class="hud-stat">Δx<strong id="hudDist">0000m</strong></div>
+  </div>
+  <div class="hud-col">
+    <div class="hud-stat best">BEST<strong id="hudBest">000000</strong></div>
+    <div class="hud-stat">SPEED<strong id="hudSpeed">1.0×</strong></div>
+  </div>
+  <div class="hud-col">
+    <div class="hud-stat" id="hudPhaseStat">PHASE<strong id="hudPhase" class="ket-a">|0⟩</strong></div>
+    <div class="hud-stat">COHERENCE<strong id="hudCoh">×1</strong></div>
+  </div>
+</section>
+
+<div class="stage">
+  <canvas id="game" width="720" height="360"></canvas>
+</div>
+
+<footer class="bottombar">
+  <div class="keys">
+    <span><kbd>SPACE</kbd>/<kbd>CLICK</kbd> TUNNEL (phase shift)</span>
+    <span><kbd>↑↓</kbd>/<kbd>WS</kbd> LANE Δy</span>
+    <span><kbd>P</kbd> PAUSE</span>
+    <span><kbd>R</kbd> RESTART</span>
+  </div>
+  <div>© NOSTALGIA.EXE — <span class="blink">█</span></div>
+</footer>
+
+<div class="touch" id="touch">
+  <div class="left-cluster">
+    <button id="tUp"   aria-label="Top lane">▲</button>
+    <button id="tDown" aria-label="Bottom lane">▼</button>
+  </div>
+  <div class="right-cluster">
+    <button id="tShift" aria-label="Phase shift">⇌</button>
+  </div>
+</div>
+
+<!-- Start menu -->
+<div class="overlay" id="startScreen">
+  <div class="card">
+    <div class="card-head">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span>quantum_superposition.app</span>
+      <span>_ □ ×</span>
+    </div>
+    <h1>QUANTUM SUPERPOSITION</h1>
+    <p>You're a qubit threading the seam between two realities. Walls bound to a single phase pass right through you when you tunnel — but stay in the wrong eigenstate and the wave function collapses. Survive long enough to defy decoherence.</p>
+
+    <div class="controls-grid">
+      <kbd>SPACE</kbd><span>tunnel — collapse to the other phase (Hadamard)</span>
+      <kbd>CLICK</kbd><span>same as SPACE on mouse / touch</span>
+      <kbd>↑ / W</kbd><span>shift to top lane (Δy adjustment)</span>
+      <kbd>↓ / S</kbd><span>shift to bottom lane (Δy adjustment)</span>
+      <kbd>P</kbd><span>pause — freeze the timeline</span>
+    </div>
+
+    <div class="qm-legend">
+      <span class="ket-a ket">|0⟩</span><span>PHASE 0 — cyan eigenstate; cyan walls are deadly here</span>
+      <span class="ket-b ket">|1⟩</span><span>PHASE 1 — magenta eigenstate; magenta walls are deadly here</span>
+      <span style="color:var(--schrod)">▣</span><span>SCHRÖDINGER BOX — rare; grants 3s of true superposition (both phases safe)</span>
+    </div>
+
+    <button class="btn" id="startBtn">▶ COLLAPSE INTO PLAY</button>
+    <button class="btn ghost" id="muteBtnMenu">♪ SOUND ON</button>
+  </div>
+</div>
+
+<!-- Pause -->
+<div class="overlay hidden" id="pauseScreen">
+  <div class="card">
+    <div class="card-head">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span>pause.sys</span>
+      <span>_ □ ×</span>
+    </div>
+    <h2>PAUSED</h2>
+    <p>Time evolution suspended.</p>
+    <button class="btn" id="resumeBtn">▶ RESUME</button>
+    <button class="btn ghost" id="restartBtnPause">↻ RESTART</button>
+  </div>
+</div>
+
+<!-- Game over -->
+<div class="overlay hidden" id="gameoverScreen">
+  <div class="card">
+    <div class="card-head">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span>collapse.log</span>
+      <span>_ □ ×</span>
+    </div>
+    <h2 style="color:var(--accent-hot)" id="gameoverTitle">WAVE FUNCTION COLLAPSED</h2>
+    <p id="gameoverDetail">Position observed; superposition lost.</p>
+    <div class="stat-row">
+      <div>ψ-SCORE<strong id="finalScore">000000</strong></div>
+      <div>BEST<strong id="finalBest">000000</strong></div>
+      <div>Δx<strong id="finalDist">0000m</strong></div>
+    </div>
+    <p id="newBestMsg" style="color:var(--accent-2);margin:4px 0 16px;display:none">✦ NEW EIGENSTATE RECORD ✦</p>
+    <p id="scoreStatus" class="score-status" data-state="idle"></p>
+    <button class="btn" id="retryBtn">↻ RECOHERE</button>
+    <a href="../index.html" class="btn ghost">◀ EXIT</a>
+  </div>
+</div>
+
+<!-- Public scoreboard plumbing -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.105.1"></script>
+<script src="../shared/supabase-config.js"></script>
+<script src="../shared/auth.js"></script>
+<script src="../shared/scores.js"></script>
+
+<script src="shared/arcade.js"></script>
+<script>
+/* =============================================================
+   QUANTUM SUPERPOSITION — phase-shift auto-runner.
+
+   The arena exists in two eigenstates simultaneously: |A⟩ (cyan)
+   and |B⟩ (magenta). The qubit (player) occupies one phase at a
+   time; obstacles are bound to a single phase too, so a wall in
+   |A⟩ is intangible to a qubit currently collapsed into |B⟩.
+
+   Tunneling (SPACE / click / tap) instantly flips the qubit's
+   phase. There is no cooldown — fast tunneling IS the game — but
+   a brief 0.12-second invulnerability after each tunnel lets the
+   player thread narrow gaps that line up across phases.
+
+   LANES
+     Two lanes (top / bottom). Movement between them lerps over
+     ~0.18s — slow enough to never substitute for tunneling. Lane
+     swap is "Δy adjustment", phase shift is "survival".
+
+   OBSTACLES
+     'wall'   — full-height bar, deadly in its phase
+     'lane'   — half-height bar in one specific lane, in one phase
+     'gap'    — full-height bar with a gap on one lane, in one phase
+     'alt'    — full-height wall whose phase oscillates (period
+                 ALT_PERIOD seconds) — must time the tunnel
+
+   PICKUPS
+     'schrod' — 3s of true superposition (both phases safe). Rare.
+
+   SCORING
+     Per-distance (1 ψ per Δx unit) plus +50 ψ × coherence per
+     obstacle the qubit phases past. Coherence builds with each
+     successful pass (cap ×5) and resets only on collapse.
+
+   Slug: quantum-superposition.
+   ============================================================= */
+
+(() => {
+const cvs = document.getElementById('game');
+const ctx = cvs.getContext('2d');
+const W = cvs.width, H = cvs.height;
+
+// ---------- Utilities from shared module ----------
+const { clamp, rand, randInt, pad, color, createAudio, createOverlayManager,
+        wireThemeToggle, fitCanvas } = Arcade;
+
+// ---------- Theme + canvas ----------
+wireThemeToggle('themeToggle');
+fitCanvas(cvs, '.stage', 16);
+
+// ---------- Audio ----------
+const sfx = createAudio('qsp.muted');
+function tunnelSfx()   { sfx.beep(640, 0.06, 'square',   0.06, 920); }
+function laneSfx()     { sfx.beep(420, 0.04, 'triangle', 0.04, 580); }
+function passSfx()     { sfx.beep(880, 0.04, 'sine',     0.04, 1240); }
+function pickupSfx()   { sfx.beep(960, 0.10, 'triangle', 0.10, 1480); }
+function collapseSfx() { sfx.noise(0.35, 0.30); sfx.beep(120, 0.5, 'sawtooth', 0.22, 30); }
+
+// ---------- Overlays ----------
+const { show: showOverlay, hideAll: hideOverlays } =
+  createOverlayManager(['startScreen', 'pauseScreen', 'gameoverScreen']);
+
+// ---------- HUD ----------
+const hudScore = document.getElementById('hudScore');
+const hudDist  = document.getElementById('hudDist');
+const hudBest  = document.getElementById('hudBest');
+const hudSpeed = document.getElementById('hudSpeed');
+const hudPhase = document.getElementById('hudPhase');
+const hudCoh   = document.getElementById('hudCoh');
+
+// ---------- Constants ----------
+const PLAYER_X       = 140;
+const PLAYER_R       = 13;
+const LANE_TOP_Y     = 110;
+const LANE_BOT_Y     = 250;
+const LANES_Y        = [LANE_TOP_Y, LANE_BOT_Y];
+const LANE_LERP_DUR  = 0.18;
+
+const BASE_SPEED     = 220;            // px/s scroll
+const SPEED_RAMP     = 1.6;            // +px/s per second elapsed
+const SPEED_CAP      = 380;
+
+const SPAWN_BASE_INTERVAL = 1.4;
+const SPAWN_MIN_INTERVAL  = 0.45;
+const SPAWN_RAMP          = 0.018;
+
+const TUNNEL_IFRAMES = 0.12;
+const ALT_PERIOD     = 0.62;            // alternating-wall phase cycle
+
+const METER_PX       = 18;
+const SCORE_PER_OBS  = 50;
+const COHERENCE_CAP  = 5;
+
+// Pickups
+const SCHROD_INTERVAL = 23;             // seconds between possible spawns
+const SCHROD_LIFE     = 8;
+const SCHROD_DUR      = 3.0;            // superposition window granted
+
+// ---------- State ----------
+const state = {
+  mode:       'menu',
+  elapsed:    0,
+  distance:   0,
+  speed:      BASE_SPEED,
+
+  // Player
+  phase:      'A',                      // 'A' | 'B'
+  fromLane:   0,
+  toLane:     0,
+  laneT:      1,                        // 0..1 lerp position
+  iframeT:    0,
+  superposeUntil: 0,                    // schrödinger-box window
+
+  // Entities
+  obstacles:  [],
+  pickups:    [],
+  particles:  [],
+
+  // Spawn timers
+  nextSpawnAt:  1.4,
+  nextSchrodAt: SCHROD_INTERVAL,
+
+  // Score
+  score:      0,
+  distM:      0,
+  best:       Number(localStorage.getItem('qsp.best') || 0),
+  coherence:  1,
+  passed:     0,                        // obstacles cleared
+
+  // Cosmetic
+  flashT:     0,
+  shakeT:     0,
+};
+
+function laneY() {
+  // Eased lerp between lane positions; laneT in [0,1].
+  const a = LANES_Y[state.fromLane];
+  const b = LANES_Y[state.toLane];
+  return a + (b - a) * state.laneT;
+}
+
+// Returns the phase that's CURRENTLY deadly for an obstacle. Plain
+// obstacles return their stored phase; alternating obstacles flip
+// every ALT_PERIOD seconds based on world elapsed time.
+function deadlyPhase(o) {
+  if (o.kind !== 'alt') return o.phase;
+  const cycle = Math.floor((state.elapsed + o.phaseOffset) / ALT_PERIOD) & 1;
+  return cycle === 0 ? 'A' : 'B';
+}
+
+function isInvuln() {
+  return state.iframeT > 0 || state.elapsed < state.superposeUntil;
+}
+
+// ---------- Reset ----------
+function resetState() {
+  state.mode      = 'playing';
+  state.elapsed   = 0;
+  state.distance  = 0;
+  state.speed     = BASE_SPEED;
+  state.phase     = 'A';
+  state.fromLane  = 0;
+  state.toLane    = 0;
+  state.laneT     = 1;
+  state.iframeT   = 0;
+  state.superposeUntil = 0;
+  state.obstacles.length = 0;
+  state.pickups.length   = 0;
+  state.particles.length = 0;
+  state.nextSpawnAt  = 1.4;
+  state.nextSchrodAt = SCHROD_INTERVAL;
+  state.score      = 0;
+  state.distM      = 0;
+  state.coherence  = 1;
+  state.passed     = 0;
+  state.flashT     = 0;
+  state.shakeT     = 0;
+  updateHUD();
+}
+
+// ---------- Input ----------
+function tunnel() {
+  if (state.mode !== 'playing') return;
+  state.phase = state.phase === 'A' ? 'B' : 'A';
+  state.iframeT = TUNNEL_IFRAMES;
+  state.flashT = 0.18;
+  tunnelSfx();
+  spawnFlashBurst();
+}
+
+function setLane(target) {
+  if (state.mode !== 'playing') return;
+  if (state.toLane === target && state.laneT >= 1) return;
+  state.fromLane = (state.laneT < 1)
+    ? lerpedLaneIdx()
+    : state.toLane;
+  state.toLane   = target;
+  state.laneT    = 0;
+  laneSfx();
+}
+
+// Approximation of "current lane" while mid-lerp — used to keep
+// the lane motion continuous if the player double-taps Δy keys.
+function lerpedLaneIdx() {
+  return state.fromLane + (state.toLane - state.fromLane) * state.laneT;
+}
+
+addEventListener('keydown', e => {
+  if (e.repeat) return;
+  const k = e.key;
+  const lk = k.toLowerCase();
+  if (k === ' ' || k === 'Spacebar' || k === 'Enter') {
+    if (state.mode === 'menu' || state.mode === 'gameover') startGame();
+    else if (state.mode === 'paused') { state.mode = 'playing'; hideOverlays(); }
+    else tunnel();
+    e.preventDefault();
+    sfx.init();
+  } else if (k === 'ArrowUp' || lk === 'w') {
+    setLane(0);
+    e.preventDefault();
+  } else if (k === 'ArrowDown' || lk === 's') {
+    setLane(1);
+    e.preventDefault();
+  } else if (lk === 'p' && state.mode !== 'menu') {
+    if (state.mode === 'playing')      { state.mode = 'paused';  showOverlay('pauseScreen'); }
+    else if (state.mode === 'paused')  { state.mode = 'playing'; hideOverlays(); }
+  } else if (lk === 'm') {
+    const muted = sfx.toggle();
+    document.getElementById('muteBtnMenu').textContent = muted ? '♪ SOUND OFF' : '♪ SOUND ON';
+  } else if (lk === 'r' && state.mode !== 'menu') {
+    startGame();
+  }
+});
+
+cvs.addEventListener('mousedown', e => {
+  if (state.mode === 'menu' || state.mode === 'gameover') { startGame(); return; }
+  if (state.mode === 'playing') tunnel();
+  e.preventDefault();
+  sfx.init();
+});
+cvs.addEventListener('touchstart', e => {
+  if (state.mode === 'menu' || state.mode === 'gameover') { startGame(); return; }
+  if (state.mode === 'playing') tunnel();
+  e.preventDefault();
+  sfx.init();
+}, { passive: false });
+
+function bindTap(btn, fn) {
+  if (!btn) return;
+  const trig = (e) => { fn(); e.preventDefault(); sfx.init(); };
+  btn.addEventListener('touchstart', trig, { passive: false });
+  btn.addEventListener('mousedown',  trig);
+}
+bindTap(document.getElementById('tUp'),    () => setLane(0));
+bindTap(document.getElementById('tDown'),  () => setLane(1));
+bindTap(document.getElementById('tShift'), () => tunnel());
+
+// Buttons
+document.getElementById('startBtn').addEventListener('click', startGame);
+document.getElementById('retryBtn').addEventListener('click', startGame);
+document.getElementById('resumeBtn').addEventListener('click', () => {
+  state.mode = 'playing'; hideOverlays();
+});
+document.getElementById('restartBtnPause').addEventListener('click', startGame);
+document.getElementById('muteBtnMenu').addEventListener('click', () => {
+  const muted = sfx.toggle();
+  document.getElementById('muteBtnMenu').textContent = muted ? '♪ SOUND OFF' : '♪ SOUND ON';
+});
+
+// ---------- Lifecycle ----------
+function startGame() {
+  resetState();
+  hideOverlays();
+  last = performance.now();
+  sfx.init();
+}
+
+// Quantum-flavored death lines — picked at random on each collapse.
+const COLLAPSE_TITLES = [
+  'WAVE FUNCTION COLLAPSED',
+  'DECOHERENCE EVENT',
+  'OBSERVER MEASUREMENT',
+  'EIGENSTATE LOCKED',
+];
+const COLLAPSE_DETAILS = [
+  'Position observed; superposition lost.',
+  'Schrödinger sends his regards.',
+  'You localized into the wrong phase.',
+  'The probability amplitude went to zero.',
+];
+
+function endGame() {
+  if (state.mode === 'gameover') return;
+  state.mode = 'gameover';
+  const finalScore = Math.floor(state.score);
+  const isBest = finalScore > state.best;
+  if (isBest) {
+    state.best = finalScore;
+    localStorage.setItem('qsp.best', String(finalScore));
+  }
+  document.getElementById('finalScore').textContent = pad(finalScore, 6);
+  document.getElementById('finalBest').textContent  = pad(state.best, 6);
+  document.getElementById('finalDist').textContent  = pad(state.distM, 4) + 'm';
+  document.getElementById('newBestMsg').style.display = isBest ? 'block' : 'none';
+  document.getElementById('gameoverTitle').textContent =
+    COLLAPSE_TITLES[randInt(0, COLLAPSE_TITLES.length - 1)];
+  document.getElementById('gameoverDetail').textContent =
+    COLLAPSE_DETAILS[randInt(0, COLLAPSE_DETAILS.length - 1)];
+  if (window.NostalgiaScores) {
+    window.NostalgiaScores.submitAndReport(
+      'quantum-superposition', finalScore, document.getElementById('scoreStatus')
+    );
+  }
+  showOverlay('gameoverScreen');
+  collapseSfx();
+  state.shakeT = 0.55;
+  state.flashT = 0.4;
+  spawnCollapseBurst();
+}
+
+// ---------- Spawning ----------
+function spawnObstacle() {
+  const t = state.elapsed;
+  // Tiered pool: opening is wall-only, mid-game adds lane blocks +
+  // gaps, late game adds alternating walls. The phase is alternated
+  // half the time so the player isn't just sitting in one phase.
+  const pool = ['wall', 'wall'];
+  if (t >= 12) pool.push('lane');
+  if (t >= 22) pool.push('gap');
+  if (t >= 35) pool.push('alt');
+  if (t >= 45) pool.push('wall', 'lane');     // bias density up later
+  const kind = pool[randInt(0, pool.length - 1)];
+  const phase = Math.random() < 0.5 ? 'A' : 'B';
+  const xWorld = state.distance + W + 30;
+  const w = 30;
+
+  if (kind === 'wall') {
+    state.obstacles.push({
+      kind: 'wall', phase, x: xWorld, w,
+      yTop: LANE_TOP_Y - 30, h: (LANE_BOT_Y - LANE_TOP_Y + 60),
+    });
+  } else if (kind === 'lane') {
+    const lane = randInt(0, 1);
+    const yTop = LANES_Y[lane] - 22;
+    state.obstacles.push({
+      kind: 'lane', phase, x: xWorld, w,
+      yTop, h: 44, lane,
+    });
+  } else if (kind === 'gap') {
+    // Gap on `lane` (open lane); the bar covers the OTHER lane.
+    const lane = randInt(0, 1);
+    state.obstacles.push({
+      kind: 'gap', phase, x: xWorld, w,
+      gapLane: lane,
+    });
+  } else if (kind === 'alt') {
+    state.obstacles.push({
+      kind: 'alt', phase: 'A', x: xWorld, w,
+      yTop: LANE_TOP_Y - 30, h: (LANE_BOT_Y - LANE_TOP_Y + 60),
+      phaseOffset: rand(0, ALT_PERIOD),       // randomize starting flip
+    });
+  }
+}
+
+function spawnSchrod() {
+  const lane = randInt(0, 1);
+  state.pickups.push({
+    kind: 'schrod',
+    x: state.distance + W + 50,
+    y: LANES_Y[lane],
+    r: 13,
+    life: SCHROD_LIFE,
+    bob: Math.random() * Math.PI * 2,
+  });
+}
+
+function spawnFlashBurst() {
+  const py = laneY();
+  const col = state.phase === 'A' ? '--phase-a' : '--phase-b';
+  for (let i = 0; i < 10; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const sp = rand(80, 220);
+    state.particles.push({
+      x: PLAYER_X, y: py,
+      vx: Math.cos(a) * sp,
+      vy: Math.sin(a) * sp,
+      life: 0.4, max: 0.4,
+      glyph: Math.random() < 0.5 ? '0' : '1',
+      color: col,
+    });
+  }
+}
+
+function spawnCollapseBurst() {
+  const py = laneY();
+  for (let i = 0; i < 26; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const sp = rand(80, 280);
+    state.particles.push({
+      x: PLAYER_X, y: py,
+      vx: Math.cos(a) * sp,
+      vy: Math.sin(a) * sp,
+      life: 0.7, max: 0.7,
+      glyph: Math.random() < 0.5 ? '0' : '1',
+      color: i % 3 === 0 ? '--qubit-trail'
+           : i % 3 === 1 ? '--phase-a'
+           :               '--phase-b',
+    });
+  }
+}
+
+// ---------- Update ----------
+function update(dt) {
+  if (state.mode !== 'playing') return;
+  state.elapsed += dt;
+
+  // Speed ramp + scroll
+  state.speed = Math.min(SPEED_CAP, BASE_SPEED + state.elapsed * SPEED_RAMP);
+  state.distance += state.speed * dt;
+  state.distM = Math.floor(state.distance / METER_PX);
+
+  // Lane lerp
+  if (state.laneT < 1) {
+    state.laneT = Math.min(1, state.laneT + dt / LANE_LERP_DUR);
+    if (state.laneT >= 1) state.fromLane = state.toLane;
+  }
+
+  // Iframe decay
+  if (state.iframeT > 0) state.iframeT = Math.max(0, state.iframeT - dt);
+
+  // Spawn timers
+  state.nextSpawnAt -= dt;
+  if (state.nextSpawnAt <= 0) {
+    spawnObstacle();
+    const interval = clamp(SPAWN_BASE_INTERVAL - state.elapsed * SPAWN_RAMP,
+                           SPAWN_MIN_INTERVAL, SPAWN_BASE_INTERVAL);
+    state.nextSpawnAt = interval + rand(-0.15, 0.25);
+  }
+  state.nextSchrodAt -= dt;
+  if (state.nextSchrodAt <= 0) {
+    spawnSchrod();
+    state.nextSchrodAt = SCHROD_INTERVAL + rand(-4, 6);
+  }
+
+  // Cull obstacles past the qubit (and award pass score on first pass)
+  const cullX = state.distance - 80;
+  const px = state.distance + PLAYER_X;
+  for (let i = state.obstacles.length - 1; i >= 0; i--) {
+    const o = state.obstacles[i];
+    if (!o.passed && o.x + o.w < px) {
+      o.passed = true;
+      state.passed++;
+      state.score += SCORE_PER_OBS * state.coherence;
+      state.coherence = Math.min(COHERENCE_CAP, state.coherence + 1);
+      passSfx();
+    }
+    if (o.x + o.w < cullX) state.obstacles.splice(i, 1);
+  }
+
+  // Pickups
+  for (let i = state.pickups.length - 1; i >= 0; i--) {
+    const p = state.pickups[i];
+    p.life -= dt;
+    p.bob += dt * 3;
+    if (p.life <= 0 || p.x + p.r * 2 < cullX) {
+      state.pickups.splice(i, 1);
+      continue;
+    }
+    // Collection check — the pickup is at world x; convert to screen.
+    const sx = p.x - state.distance;
+    const dx = sx - PLAYER_X;
+    const dy = p.y - laneY();
+    if (dx * dx + dy * dy < (PLAYER_R + p.r) * (PLAYER_R + p.r)) {
+      // Schrödinger box — both phases safe for SCHROD_DUR
+      state.superposeUntil = state.elapsed + SCHROD_DUR;
+      state.pickups.splice(i, 1);
+      pickupSfx();
+      // Pretty burst
+      for (let k = 0; k < 14; k++) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = rand(80, 220);
+        state.particles.push({
+          x: sx, y: p.y,
+          vx: Math.cos(a) * sp,
+          vy: Math.sin(a) * sp,
+          life: 0.5, max: 0.5,
+          glyph: Math.random() < 0.5 ? '0' : '1',
+          color: '--schrod',
+        });
+      }
+    }
+  }
+
+  // ---- Collisions ----
+  if (!isInvuln()) {
+    const py = laneY();
+    for (const o of state.obstacles) {
+      const sx = o.x - state.distance;
+      // Broad-phase: skip if not near the qubit
+      if (sx > PLAYER_X + PLAYER_R + 20 || sx + o.w < PLAYER_X - PLAYER_R) continue;
+      if (deadlyPhase(o) !== state.phase) continue;
+      // Narrow check by kind
+      if (o.kind === 'gap') {
+        // Bar exists in BOTH lanes EXCEPT the gap lane. So we kill if
+        // the qubit is NOT in the gap lane and overlapping the bar's x.
+        if (state.toLane === o.gapLane && state.laneT > 0.5) continue;
+        if (state.fromLane === o.gapLane && state.laneT < 0.5) continue;
+        return endGame();
+      } else {
+        // Standard rect overlap on screen-space
+        const rx = sx, ry = (o.kind === 'lane') ? o.yTop : o.yTop;
+        const rw = o.w, rh = (o.kind === 'lane') ? o.h : o.h;
+        const pxLeft   = PLAYER_X - PLAYER_R;
+        const pxRight  = PLAYER_X + PLAYER_R;
+        const pyTop    = py - PLAYER_R;
+        const pyBottom = py + PLAYER_R;
+        if (pxLeft < rx + rw && pxRight > rx && pyTop < ry + rh && pyBottom > ry) {
+          return endGame();
+        }
+      }
+    }
+  }
+
+  // Particles
+  for (let i = state.particles.length - 1; i >= 0; i--) {
+    const p = state.particles[i];
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.vx *= 0.92;
+    p.vy *= 0.92;
+    p.life -= dt;
+    if (p.life <= 0) state.particles.splice(i, 1);
+  }
+
+  // Decays
+  if (state.flashT > 0) state.flashT = Math.max(0, state.flashT - dt);
+  if (state.shakeT > 0) state.shakeT = Math.max(0, state.shakeT - dt);
+
+  // Per-distance score (1 ψ / Δx unit) modulated by coherence
+  state.score += (state.speed * dt / METER_PX) * (1 + (state.coherence - 1) * 0.25);
+
+  updateHUD();
+}
+
+// ---------- HUD ----------
+function updateHUD() {
+  hudScore.textContent = pad(Math.floor(state.score), 6);
+  hudDist.textContent  = pad(state.distM, 4) + 'm';
+  hudBest.textContent  = pad(state.best, 6);
+  hudSpeed.textContent = (state.speed / BASE_SPEED).toFixed(1) + '×';
+  // Internal state.phase ('A' / 'B') stays for code clarity; the
+  // displayed labels use the canonical computational-basis kets so
+  // the HUD reads as proper qubit notation (|0⟩ ground, |1⟩ excited).
+  hudPhase.textContent = state.phase === 'A' ? '|0⟩' : '|1⟩';
+  hudPhase.className   = state.phase === 'A' ? 'ket-a' : 'ket-b';
+  hudCoh.textContent   = '×' + state.coherence;
+}
+
+// ---------- Render ----------
+function render() {
+  let shx = 0, shy = 0;
+  if (state.shakeT > 0) {
+    shx = (Math.random() - 0.5) * 6;
+    shy = (Math.random() - 0.5) * 4;
+  }
+  ctx.save();
+  ctx.translate(shx, shy);
+
+  drawBackground();
+  drawLaneMarkers();
+  drawObstacles();
+  drawPickups();
+  drawPlayer();
+  drawParticles();
+  drawSchrodOverlay();
+  drawFlash();
+  drawScanlines();
+
+  ctx.restore();
+}
+
+function drawBackground() {
+  // Dark gradient base
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, color('--bg-mid'));
+  grad.addColorStop(1, color('--bg-deep'));
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+
+  // Phase tint — subtle full-canvas wash colored by current phase
+  const phaseCol = state.phase === 'A' ? '--phase-a' : '--phase-b';
+  ctx.globalAlpha = 0.08;
+  ctx.fillStyle = color(phaseCol);
+  ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = 1;
+
+  // Stars (deterministic seed so they don't flicker)
+  ctx.fillStyle = color('--star');
+  for (let i = 0; i < 60; i++) {
+    const seed = i * 53.13;
+    const x = ((seed * 97) - state.distance * 0.15) % W;
+    const sx = x < 0 ? x + W : x;
+    const y = (seed * 41) % H;
+    ctx.globalAlpha = 0.3 + (i % 5) * 0.08;
+    ctx.fillRect(sx | 0, y | 0, i % 7 === 0 ? 2 : 1, 1);
+  }
+  ctx.globalAlpha = 1;
+
+  // Scrolling vertical grid lines so motion reads
+  const spacing = 60;
+  const offset  = state.distance % spacing;
+  ctx.strokeStyle = color('--grid-line');
+  ctx.globalAlpha = 0.5;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let x = -offset; x < W; x += spacing) {
+    ctx.moveTo(x | 0, 60);
+    ctx.lineTo(x | 0, H - 50);
+  }
+  ctx.stroke();
+  // Horizontal mid-rule
+  ctx.beginPath();
+  ctx.moveTo(0, H / 2 | 0);
+  ctx.lineTo(W, H / 2 | 0);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
+function drawLaneMarkers() {
+  // Faint horizontal lines at each lane's y so the player can read
+  // lane targets at speed.
+  ctx.strokeStyle = color('--grid-line-2');
+  ctx.globalAlpha = 0.4;
+  ctx.setLineDash([6, 6]);
+  ctx.beginPath();
+  for (const y of LANES_Y) {
+    ctx.moveTo(0, y);
+    ctx.lineTo(W, y);
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.globalAlpha = 1;
+}
+
+function drawObstacles() {
+  for (const o of state.obstacles) {
+    const sx = o.x - state.distance;
+    if (sx + o.w < -20 || sx > W + 20) continue;
+    const dPhase = deadlyPhase(o);
+    const isActive = dPhase === state.phase;
+    const colName = dPhase === 'A' ? '--phase-a' : '--phase-b';
+    const col = color(colName);
+
+    // Active-phase obstacles render solid and bright; inactive
+    // (ghost) phase renders at low alpha so the upcoming layout is
+    // legible without making the wrong-phase walls feel deadly.
+    ctx.globalAlpha = isActive ? 1 : 0.22;
+
+    if (o.kind === 'wall' || o.kind === 'alt') {
+      drawBlock(sx, o.yTop, o.w, o.h, col, isActive, o.kind === 'alt');
+    } else if (o.kind === 'lane') {
+      drawBlock(sx, o.yTop, o.w, o.h, col, isActive, false);
+    } else if (o.kind === 'gap') {
+      // Bar covers BOTH lanes except the open one; render as two
+      // half-height blocks (top and/or bottom) skipping the gap lane.
+      const yTopA = LANE_TOP_Y - 30, hA = 44 + 10;          // upper bar
+      const yTopB = LANE_BOT_Y - 22, hB = 44 + 10;          // lower bar
+      if (o.gapLane !== 0) drawBlock(sx, yTopA, o.w, hA, col, isActive, false);
+      if (o.gapLane !== 1) drawBlock(sx, yTopB, o.w, hB, col, isActive, false);
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawBlock(x, y, w, h, col, isActive, isAlt) {
+  // Body
+  ctx.fillStyle = col;
+  ctx.fillRect(x, y, w, h);
+  // Inner darker panel for depth
+  ctx.fillStyle = 'rgba(0,0,0,0.32)';
+  ctx.fillRect(x + 3, y + 3, w - 6, h - 6);
+  // Top edge highlight
+  ctx.fillStyle = col;
+  ctx.fillRect(x, y, w, 2);
+  // Glow halo around active-phase blocks
+  if (isActive) {
+    ctx.globalAlpha *= 0.35;
+    ctx.fillRect(x - 3, y - 3, w + 6, h + 6);
+    ctx.globalAlpha /= 0.35;
+  }
+  // Alt walls get a small "⇌" tick so the player can spot them
+  if (isAlt) {
+    ctx.fillStyle = '#fff';
+    ctx.font = "10px 'Press Start 2P', monospace";
+    ctx.textAlign = 'center';
+    ctx.fillText('⇌', x + w / 2, y + h / 2 + 4);
+    ctx.textAlign = 'left';
+  }
+}
+
+function drawPickups() {
+  for (const p of state.pickups) {
+    const sx = p.x - state.distance;
+    if (sx < -20 || sx > W + 20) continue;
+    const yBob = p.y + Math.sin(p.bob) * 4;
+    const col = color('--schrod');
+    // Aura
+    ctx.globalAlpha = 0.35 + Math.sin(p.bob * 2) * 0.15;
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.arc(sx, yBob, p.r + 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    // Box outline (Schrödinger's box)
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(sx - p.r, yBob - p.r, p.r * 2, p.r * 2);
+    // Cat-eye dots inside
+    ctx.fillStyle = col;
+    ctx.fillRect(sx - 4, yBob - 1, 2, 2);
+    ctx.fillRect(sx + 2, yBob - 1, 2, 2);
+    // Half-life ticker beneath
+    if (p.life < 3) {
+      const w = p.r * 2;
+      ctx.globalAlpha = 0.6;
+      ctx.fillRect(sx - p.r, yBob + p.r + 4, (p.life / 3) * w, 2);
+      ctx.globalAlpha = 1;
+    }
+  }
+}
+
+function drawPlayer() {
+  const py = laneY();
+  const phaseCol = state.phase === 'A' ? '--phase-a' : '--phase-b';
+  const glowCol  = state.phase === 'A' ? '--phase-a-glow' : '--phase-b-glow';
+  const col = color(phaseCol);
+  const glow = color(glowCol);
+
+  // Wave-function trail behind the qubit — small sinusoidal samples
+  // colored by current phase. Emphasizes the "you ARE the wave".
+  const trailCol = color('--qubit-trail');
+  ctx.fillStyle = trailCol;
+  for (let i = 1; i <= 5; i++) {
+    const t = i / 5;
+    const tx = PLAYER_X - i * 8;
+    const ty = py + Math.sin(state.elapsed * 14 + i * 0.9) * (4 - i * 0.6);
+    ctx.globalAlpha = 0.55 * (1 - t);
+    ctx.fillRect(tx | 0, ty | 0, 3, 3);
+  }
+  ctx.globalAlpha = 1;
+
+  // Phase shift flash glow
+  if (state.flashT > 0) {
+    const t = state.flashT / 0.18;
+    ctx.globalAlpha = t * 0.6;
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(PLAYER_X, py, PLAYER_R + 6 + t * 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  // Body — diamond-shaped qubit (rotated square)
+  ctx.save();
+  ctx.translate(PLAYER_X, py);
+  ctx.rotate(Math.PI / 4);
+  // Glow halo
+  ctx.globalAlpha = 0.4;
+  ctx.fillStyle = col;
+  ctx.fillRect(-PLAYER_R - 2, -PLAYER_R - 2, (PLAYER_R + 2) * 2, (PLAYER_R + 2) * 2);
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = col;
+  ctx.fillRect(-PLAYER_R, -PLAYER_R, PLAYER_R * 2, PLAYER_R * 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.32)';
+  ctx.fillRect(-PLAYER_R + 3, -PLAYER_R + 3, PLAYER_R * 2 - 6, PLAYER_R * 2 - 6);
+  // Bright pixel core
+  ctx.fillStyle = color('--qubit-core');
+  ctx.fillRect(-1, -1, 2, 2);
+  ctx.restore();
+
+  // Iframe blink
+  if (state.iframeT > 0 && ((state.elapsed * 30) | 0) % 2 === 0) {
+    ctx.globalAlpha = 0.5;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(PLAYER_X, py, PLAYER_R + 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawSchrodOverlay() {
+  // While in the schrödinger window both phases are safe — render a
+  // soft rainbow ring + a mid-screen "SUPERPOSITION" label.
+  const rem = state.superposeUntil - state.elapsed;
+  if (rem <= 0) return;
+  const py = laneY();
+  ctx.strokeStyle = color('--schrod');
+  ctx.lineWidth = 3;
+  ctx.globalAlpha = 0.7 + Math.sin(state.elapsed * 12) * 0.25;
+  ctx.beginPath();
+  ctx.arc(PLAYER_X, py, PLAYER_R + 7, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+  // Header
+  ctx.fillStyle = color('--schrod');
+  ctx.font = "10px 'Press Start 2P', monospace";
+  ctx.textAlign = 'center';
+  ctx.fillText('SUPERPOSITION ' + rem.toFixed(1) + 's', W / 2, 36);
+  ctx.textAlign = 'left';
+}
+
+function drawParticles() {
+  ctx.font = "9px 'JetBrains Mono', monospace";
+  ctx.textBaseline = 'top';
+  for (const p of state.particles) {
+    ctx.globalAlpha = Math.max(0, p.life / p.max);
+    ctx.fillStyle = color(p.color);
+    ctx.fillText(p.glyph, p.x, p.y);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawFlash() {
+  if (state.flashT <= 0) return;
+  const t = state.flashT / 0.18;
+  // Use the OPPOSITE phase's color for the flash so the player sees
+  // a rapid color invert at the moment of tunneling.
+  const flashCol = state.phase === 'A' ? '--phase-b' : '--phase-a';
+  ctx.globalAlpha = t * 0.35;
+  ctx.fillStyle = color(flashCol);
+  ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = 1;
+}
+
+function drawScanlines() {
+  ctx.globalAlpha = 0.05;
+  ctx.fillStyle = '#ffffff';
+  for (let y = 0; y < H; y += 3) ctx.fillRect(0, y, W, 1);
+  ctx.globalAlpha = 1;
+}
+
+// ---------- Main loop ----------
+let last = performance.now();
+const MAX_DT = 1 / 30;
+function frame(now) {
+  let dt = (now - last) / 1000;
+  last = now;
+  if (dt > MAX_DT) dt = MAX_DT;
+  update(dt);
+  render();
+  requestAnimationFrame(frame);
+}
+
+resetState();
+state.mode = 'menu';
+showOverlay('startScreen');
+updateHUD();
+requestAnimationFrame(frame);
+
+})();
+</script>
+</body>
+</html>

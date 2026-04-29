@@ -1,0 +1,1159 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<!-- Discourage browser caching so edits to this file are picked up on reload. -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
+<title>GRIDWAVE 2049 — Nostalgia.exe</title>
+<link rel="icon" type="image/svg+xml" href="../favicon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=Press+Start+2P&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="shared/arcade.css" />
+<style>
+  /* ==========================================================
+     GRIDWAVE 2049 — game-specific overrides.
+     Shared chrome comes from shared/arcade.css.
+     Tetromino palette uses neon tones to match the hub.
+     ========================================================== */
+  :root {
+    /* Tetromino colors (dark theme) */
+    --tet-i:   #4ff4ff;    /* cyan */
+    --tet-o:   #ffcc33;    /* yellow */
+    --tet-t:   #b388ff;    /* purple */
+    --tet-s:   #5ff07a;    /* green */
+    --tet-z:   #ff4f7a;    /* red */
+    --tet-j:   #4ea5ff;    /* blue */
+    --tet-l:   #ff9a4c;    /* orange */
+    /* Shared block shading */
+    --tet-hi:  rgba(255,255,255,0.35);
+    --tet-lo:  rgba(0,0,0,0.35);
+    --tet-ghost: rgba(255,255,255,0.18);
+    --playfield-bg: #10101a;
+    --playfield-line: rgba(255,255,255,0.04);
+    --panel-inner:  #14141e;
+    --panel-stroke: #2a2a3a;
+    --glow:     #00e5ff;
+  }
+  [data-theme="light"] {
+    --tet-i:   #1ba5b2;
+    --tet-o:   #c68a00;
+    --tet-t:   #7a52c6;
+    --tet-s:   #2e9a4a;
+    --tet-z:   #c83854;
+    --tet-j:   #2c6ec8;
+    --tet-l:   #c66522;
+    --tet-hi:  rgba(255,255,255,0.55);
+    --tet-lo:  rgba(0,0,0,0.22);
+    --tet-ghost: rgba(30,30,50,0.18);
+    --playfield-bg: #f1e8ce;
+    --playfield-line: rgba(26,26,40,0.06);
+    --panel-inner:  #f7eeda;
+    --panel-stroke: #a59c7e;
+    --glow:     #1aa5cc;
+  }
+
+  canvas { max-width: 100%; max-height: 100%; image-rendering: pixelated; }
+
+  /* Start / gameover splash table.
+     Two columns: description (flex) on the LEFT, key capsule(s) on the RIGHT.
+     Special first row: ← / → share a single row with the description
+     "move piece left / right" centred *underneath* both arrows. */
+  .controls-grid {
+    display: grid;
+    grid-template-columns: 1fr max-content;
+    align-items: center;
+    gap: 8px 18px;
+    margin: 14px 0 18px;
+    text-align: left;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .controls-grid .move-row {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+  }
+  .controls-grid .move-keys {
+    display: inline-flex;
+    gap: 12px;
+  }
+  .controls-grid .move-desc {
+    text-align: center;
+    color: var(--text);
+    opacity: 0.9;
+  }
+  .controls-grid .keys-cell {
+    display: inline-flex;
+    gap: 6px;
+    justify-content: flex-end;
+    align-items: center;
+  }
+  .controls-grid kbd {
+    display: inline-block;
+    background: var(--panel-2);
+    border: 1px solid var(--text);
+    padding: 2px 10px;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 9px;
+    min-width: 48px;
+    text-align: center;
+    line-height: 1.4;
+  }
+  .controls-grid .desc { color: var(--text); opacity: 0.9; }
+</style>
+</head>
+<body>
+
+<div class="bg-grid"></div>
+<div class="scanlines"></div>
+
+<header class="topbar">
+  <a href="../index.html" class="back">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    EXIT
+  </a>
+  <div class="title-tag">GRIDWAVE 2049<span class="ver">v1.0.0 // 2049.EXE</span></div>
+  <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme"></button>
+</header>
+
+<section class="hud" id="hud">
+  <div class="hud-col">
+    <div class="hud-stat score">SCORE<strong id="hudScore">000000</strong></div>
+    <div class="hud-stat">LEVEL<strong id="hudLevel">01</strong></div>
+  </div>
+  <div class="hud-col">
+    <div class="hud-stat">LINES<strong id="hudLines">000</strong></div>
+    <div class="hud-stat best">BEST<strong id="hudBest">000000</strong></div>
+  </div>
+</section>
+
+<div class="stage">
+  <canvas id="game" width="640" height="620"></canvas>
+</div>
+
+<footer class="bottombar">
+  <div class="keys">
+    <span><kbd>←</kbd><kbd>→</kbd> MOVE</span>
+    <span><kbd>↓</kbd> SOFT DROP</span>
+    <span><kbd>X</kbd> ROTATE</span>
+    <span><kbd>Z</kbd> ROTATE CCW</span>
+    <span><kbd>C</kbd> HOLD</span>
+    <span><kbd>P</kbd> PAUSE</span>
+    <span><kbd>M</kbd> MUTE</span>
+  </div>
+  <div>© NOSTALGIA.EXE — <span class="blink">█</span></div>
+</footer>
+
+<div class="touch" id="touch">
+  <div class="right-cluster">
+    <button id="tLeft"  aria-label="Left">◀</button>
+    <button id="tDrop"  aria-label="Drop">▼</button>
+    <button id="tRight" aria-label="Right">▶</button>
+  </div>
+  <div class="right-cluster">
+    <button id="tRot"  aria-label="Rotate">↻</button>
+    <button id="tHold" aria-label="Hold">H</button>
+  </div>
+</div>
+
+<!-- Start menu -->
+<div class="overlay" id="startScreen">
+  <div class="card">
+    <div class="card-head">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span>gridwave_2049.app</span>
+      <span>_ □ ×</span>
+    </div>
+    <h1>GRIDWAVE 2049</h1>
+    <p>Neon tetrominoes cascade through the quantum grid. Stack, rotate, clear — before the stack crests the sky and the signal collapses.</p>
+
+    <div class="controls-grid">
+      <!-- Row 1+2: arrows side-by-side, description centered beneath them -->
+      <div class="move-row">
+        <div class="move-keys"><kbd>←</kbd><kbd>→</kbd></div>
+        <div class="move-desc">move piece left / right</div>
+      </div>
+      <!-- Remaining rows: description (left) + key capsule(s) (right) -->
+      <span class="desc">soft drop (hold for faster fall)</span>
+      <span class="keys-cell"><kbd>↓</kbd></span>
+      <span class="desc">rotate clockwise</span>
+      <span class="keys-cell"><kbd>X</kbd></span>
+      <span class="desc">rotate counter-clockwise</span>
+      <span class="keys-cell"><kbd>Z</kbd></span>
+      <span class="desc">hold piece (once per spawn)</span>
+      <span class="keys-cell"><kbd>C</kbd></span>
+    </div>
+
+    <button class="btn" id="startBtn">▶ START RUN</button>
+    <button class="btn ghost" id="muteBtnMenu">♪ SOUND ON</button>
+  </div>
+</div>
+
+<!-- Pause -->
+<div class="overlay hidden" id="pauseScreen">
+  <div class="card">
+    <div class="card-head">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span>pause.sys</span>
+      <span>_ □ ×</span>
+    </div>
+    <h2>PAUSED</h2>
+    <p>The grid holds its breath.</p>
+    <button class="btn" id="resumeBtn">▶ RESUME</button>
+    <button class="btn ghost" id="restartBtnPause">↻ RESTART</button>
+  </div>
+</div>
+
+<!-- Game over -->
+<div class="overlay hidden" id="gameoverScreen">
+  <div class="card">
+    <div class="card-head">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span>stack_overflow.log</span>
+      <span>_ □ ×</span>
+    </div>
+    <h2 style="color:var(--accent-hot)">GRID COLLAPSED</h2>
+    <p>The stack breached the ceiling. Signal lost.</p>
+    <div class="stat-row">
+      <div>SCORE<strong id="finalScore">000000</strong></div>
+      <div>LINES<strong id="finalLines">000</strong></div>
+      <div>LEVEL<strong id="finalLevel">01</strong></div>
+      <div>BEST<strong id="finalBest">000000</strong></div>
+    </div>
+    <p id="newBestMsg" style="color:var(--accent-2);margin:4px 0 16px;display:none">✦ NEW BEST ✦</p>
+    <p id="scoreStatus" class="score-status" data-state="idle"></p>
+    <button class="btn" id="retryBtn">↻ RUN AGAIN</button>
+    <a href="../index.html" class="btn ghost">◀ EXIT</a>
+  </div>
+</div>
+
+<!-- Public scoreboard plumbing -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.105.1"></script>
+<script src="../shared/supabase-config.js"></script>
+<script src="../shared/auth.js"></script>
+<script src="../shared/scores.js"></script>
+
+<script src="shared/arcade.js"></script>
+<script>
+/* =============================================================
+   GRIDWAVE 2049 — a tetromino stacker on the neon quantum grid.
+   Classic rules: 10-wide × 20-tall playfield, 7 tetrominoes from
+   a 7-bag randomizer, rotation with simple wall kicks, hold,
+   2-piece next preview, ghost landing, line clears with flash,
+   levels scale fall speed, scoring matches standard guidelines.
+   ============================================================= */
+
+(() => {
+const cvs = document.getElementById('game');
+const ctx = cvs.getContext('2d');
+const W = cvs.width, H = cvs.height;
+
+// ---------- Shared utilities ----------
+const { clamp, rand, randInt, pad, color, createAudio, createOverlayManager,
+        wireThemeToggle, fitCanvas } = Arcade;
+const css = color;
+
+wireThemeToggle('themeToggle');
+
+const audio = createAudio('gw.muted');
+const initAudio = audio.init;
+const beep  = audio.beep;
+const noise = audio.noise;
+const sfx = {
+  move:   () => beep(220, 0.03, 'square',   0.06, 260),
+  rotate: () => beep(440, 0.04, 'square',   0.07, 540),
+  soft:   () => beep(180, 0.02, 'square',   0.05, 140),
+  lock:   () => beep(110, 0.06, 'triangle', 0.10, 90),
+  hardDrop: () => { beep(320, 0.05, 'sawtooth', 0.10, 120); noise(0.05, 0.08); },
+  hold:   () => beep(540, 0.08, 'triangle', 0.10, 720),
+  line1:  () => { beep(440, 0.09, 'square', 0.12, 720);
+                  setTimeout(() => beep(620, 0.10, 'square', 0.11, 880), 70); },
+  line2:  () => { beep(480, 0.09, 'square', 0.12, 740);
+                  setTimeout(() => beep(720, 0.10, 'square', 0.11, 960), 70);
+                  setTimeout(() => beep(880, 0.10, 'square', 0.10, 1080), 140); },
+  tetris: () => { beep(560, 0.10, 'square', 0.14, 1040);
+                  setTimeout(() => beep(880, 0.12, 'square', 0.13, 1320), 80);
+                  setTimeout(() => beep(1240, 0.14, 'square', 0.12, 1680), 180);
+                  setTimeout(() => beep(1560, 0.18, 'sine',   0.10, 2100), 320); },
+  levelUp: () => { beep(660, 0.14, 'triangle', 0.14, 1100);
+                   setTimeout(() => beep(990, 0.14, 'triangle', 0.13, 1540), 120); },
+  gameover: () => { beep(440, 0.18, 'square', 0.14, 160);
+                    setTimeout(() => beep(220, 0.26, 'square', 0.14, 80), 180); },
+};
+
+// ---------- Playfield geometry ----------
+const COLS       = 10;
+const ROWS       = 20;
+const BLOCK      = 26;
+const FIELD_W    = COLS * BLOCK;    // 260
+const FIELD_H    = ROWS * BLOCK;    // 520
+const FIELD_X    = 190;             // top-left x of playfield in canvas
+const FIELD_Y    = 50;              // top-left y of playfield
+
+const PANEL_L_X  = 20,  PANEL_L_Y = 50, PANEL_L_W = 150, PANEL_L_H = 140;
+const PANEL_N_X  = 470, PANEL_N_Y = 50, PANEL_N_W = 150, PANEL_N_H = 270;
+const PANEL_S_X  = 470, PANEL_S_Y = 340, PANEL_S_W = 150, PANEL_S_H = 220;
+const PANEL_LOGO_X = 20, PANEL_LOGO_Y = 430, PANEL_LOGO_W = 150, PANEL_LOGO_H = 140;
+
+// ---------- Tetromino definitions ----------
+// Each piece is a bounding-box matrix where 1 = filled. The matrix is
+// rotated in place to get other rotation states. I-piece uses 4×4 so
+// rotations stay centered; O uses 2×2 (no-op); rest use 3×3.
+const PIECE_KEYS = ['I', 'O', 'T', 'S', 'Z', 'J', 'L'];
+const PIECE_COLORS = {
+  I: '--tet-i', O: '--tet-o', T: '--tet-t', S: '--tet-s',
+  Z: '--tet-z', J: '--tet-j', L: '--tet-l',
+};
+const PIECE_SHAPES = {
+  I: [
+    [0,0,0,0],
+    [1,1,1,1],
+    [0,0,0,0],
+    [0,0,0,0],
+  ],
+  O: [
+    [1,1],
+    [1,1],
+  ],
+  T: [
+    [0,1,0],
+    [1,1,1],
+    [0,0,0],
+  ],
+  S: [
+    [0,1,1],
+    [1,1,0],
+    [0,0,0],
+  ],
+  Z: [
+    [1,1,0],
+    [0,1,1],
+    [0,0,0],
+  ],
+  J: [
+    [1,0,0],
+    [1,1,1],
+    [0,0,0],
+  ],
+  L: [
+    [0,0,1],
+    [1,1,1],
+    [0,0,0],
+  ],
+};
+
+function rotateMatrix(m, dir) {
+  // dir = +1 clockwise, -1 counter-clockwise
+  const n = m.length;
+  const r = Array.from({length: n}, () => Array(n).fill(0));
+  for (let y = 0; y < n; y++) {
+    for (let x = 0; x < n; x++) {
+      if (dir > 0) r[x][n - 1 - y] = m[y][x];
+      else          r[n - 1 - x][y] = m[y][x];
+    }
+  }
+  return r;
+}
+
+// Precompute all 4 rotations for each piece, indexed [0..3].
+const PIECE_ROT = {};
+for (const k of PIECE_KEYS) {
+  const rots = [PIECE_SHAPES[k].map(r => r.slice())];
+  for (let i = 1; i < 4; i++) rots.push(rotateMatrix(rots[i - 1], +1));
+  PIECE_ROT[k] = rots;
+}
+
+// ---------- 7-bag randomizer ----------
+// Each bag contains every piece exactly once in random order. This
+// eliminates long droughts and matches modern Tetris convention.
+let bag = [];
+function refillBag() {
+  const pool = PIECE_KEYS.slice();
+  while (pool.length) {
+    const idx = randInt(0, pool.length - 1);
+    bag.push(pool.splice(idx, 1)[0]);
+  }
+}
+function nextKey() {
+  if (bag.length === 0) refillBag();
+  return bag.shift();
+}
+
+// ---------- Game state ----------
+// NOTE: grid is initialised to an empty 2D array immediately so the very
+// first draw() call during the menu phase does not crash on state.grid[r][c].
+// resetGame() replaces it with a fresh grid when a run actually starts.
+function emptyGrid() {
+  return Array.from({length: ROWS}, () => Array(COLS).fill(null));
+}
+const state = {
+  phase: 'menu',       // 'menu' | 'playing' | 'paused' | 'gameover'
+  grid: emptyGrid(),   // ROWS × COLS, each cell is null or a piece-key string
+  current: null,       // { key, rot, x, y, shape }
+  hold: null,          // piece key or null
+  canHold: true,       // once per spawn
+  queue: [],           // upcoming piece keys (keep ≥3)
+  score: 0,
+  lines: 0,
+  level: 1,
+  best: parseInt(localStorage.getItem('gw.best') || '0'),
+  fallTimer: 0,        // ms accumulator
+  lockTimer: 0,        // ms since piece first touched ground
+  lockMax: 500,        // max floor-lock delay
+  softDropping: false,
+  // animation
+  clearingRows: null,  // array of row indices being cleared, or null
+  clearAnim: 0,        // ms left of flash
+  flashLevel: 0,       // quick level-up flash
+};
+
+// ---------- Falling speed curve ----------
+// Roughly mirrors the classic Tetris curve in milliseconds per row.
+// Level 1 is forgiving; level 20 is near-unplayable.
+function gravityMs(level) {
+  const table = [
+    0,        // unused (levels start at 1)
+    1000, 850, 720, 610, 520, 440, 370, 300, 240, 190,
+    150, 120, 95, 75, 60, 48, 38, 30, 24, 18,
+  ];
+  if (level < table.length) return table[level];
+  return 16; // floor — 1 row per animation frame @ 60fps
+}
+
+// ---------- Spawning ----------
+function spawnPiece(forcedKey = null) {
+  // Refill queue so we always have at least 3 pieces ready to show
+  while (state.queue.length < 5) state.queue.push(nextKey());
+  const key = forcedKey || state.queue.shift();
+  const shape = PIECE_ROT[key][0];
+  const p = {
+    key,
+    rot: 0,
+    shape,
+    // Center the piece horizontally. For I & O the math lands squarely;
+    // for 3x3 pieces we land them centered-left (standard).
+    x: Math.floor((COLS - shape[0].length) / 2),
+    y: key === 'I' ? -1 : 0,
+  };
+  state.current = p;
+  state.canHold = true;
+  state.lockTimer = 0;
+  state.fallTimer = 0;
+
+  // If the freshly-spawned piece already collides, the grid is full.
+  if (collides(p, 0, 0, p.shape)) {
+    state.phase = 'gameover';
+    endGame();
+  }
+}
+
+// ---------- Collision ----------
+function collides(p, dx, dy, shape) {
+  for (let r = 0; r < shape.length; r++) {
+    for (let c = 0; c < shape[r].length; c++) {
+      if (!shape[r][c]) continue;
+      const nx = p.x + c + dx;
+      const ny = p.y + r + dy;
+      if (nx < 0 || nx >= COLS || ny >= ROWS) return true;
+      if (ny < 0) continue; // allow spawning above the top row
+      if (state.grid[ny][nx]) return true;
+    }
+  }
+  return false;
+}
+
+// ---------- Movement ----------
+function move(dx) {
+  if (!state.current) return;
+  if (!collides(state.current, dx, 0, state.current.shape)) {
+    state.current.x += dx;
+    sfx.move();
+    // Any movement resets the lock timer (classic "move-reset lock delay")
+    if (isGrounded()) state.lockTimer = 0;
+  }
+}
+
+// Soft-drop is implemented inline in the gravity loop — when
+// `state.softDropping` is true the per-tick fall delay is divided
+// by 8 and a +1 score bonus is awarded per row gained. No standalone
+// function needed.
+
+function rotate(dir) {
+  if (!state.current) return;
+  const p = state.current;
+  const nextRot = (p.rot + (dir > 0 ? 1 : 3)) % 4;
+  const nextShape = PIECE_ROT[p.key][nextRot];
+  // Simple wall-kick sequence: try offsets 0, ±1, ±2 (x-axis) then -1 y
+  const kicks = [ [0,0], [-1,0], [1,0], [-2,0], [2,0], [0,-1], [-1,-1], [1,-1] ];
+  for (const [kx, ky] of kicks) {
+    if (!collides(p, kx, ky, nextShape)) {
+      p.rot = nextRot;
+      p.shape = nextShape;
+      p.x += kx;
+      p.y += ky;
+      sfx.rotate();
+      if (isGrounded()) state.lockTimer = 0;
+      return;
+    }
+  }
+  // Rotation blocked — no-op.
+}
+
+function hold() {
+  if (!state.current || !state.canHold) return;
+  const heldKey = state.hold;
+  state.hold = state.current.key;
+  state.canHold = false;
+  sfx.hold();
+  if (heldKey) spawnPiece(heldKey);
+  else         spawnPiece();
+  // Prevent immediate re-hold after the swap — spawnPiece resets canHold
+  // but we want to block the same piece being cycled infinitely.
+  state.canHold = false;
+}
+
+function isGrounded() {
+  if (!state.current) return false;
+  return collides(state.current, 0, 1, state.current.shape);
+}
+
+// ---------- Locking ----------
+function lockPiece() {
+  const p = state.current;
+  if (!p) return;
+  for (let r = 0; r < p.shape.length; r++) {
+    for (let c = 0; c < p.shape[r].length; c++) {
+      if (!p.shape[r][c]) continue;
+      const y = p.y + r;
+      const x = p.x + c;
+      if (y >= 0 && y < ROWS && x >= 0 && x < COLS) state.grid[y][x] = p.key;
+    }
+  }
+  sfx.lock();
+  state.current = null;
+
+  // Detect cleared rows
+  const fullRows = [];
+  for (let y = 0; y < ROWS; y++) {
+    if (state.grid[y].every(cell => cell !== null)) fullRows.push(y);
+  }
+  if (fullRows.length > 0) {
+    state.clearingRows = fullRows;
+    state.clearAnim = 320;  // ms of flash
+    // Scoring uses the original Nintendo formula scaled to level
+    const pts = [0, 100, 300, 500, 800][fullRows.length] * state.level;
+    state.score += pts;
+    state.lines += fullRows.length;
+
+    // Level up every 10 lines
+    const nextLevel = Math.floor(state.lines / 10) + 1;
+    if (nextLevel > state.level) {
+      state.level = Math.min(20, nextLevel);
+      state.flashLevel = 260;
+      sfx.levelUp();
+    } else {
+      if (fullRows.length === 4)      sfx.tetris();
+      else if (fullRows.length >= 2)  sfx.line2();
+      else                             sfx.line1();
+    }
+  } else {
+    spawnPiece();
+  }
+  updateHUD();
+}
+
+function finishClear() {
+  if (!state.clearingRows) return;
+  // Remove cleared rows; pull the rest down.
+  const keep = [];
+  for (let y = 0; y < ROWS; y++) {
+    if (!state.clearingRows.includes(y)) keep.push(state.grid[y]);
+  }
+  while (keep.length < ROWS) keep.unshift(Array(COLS).fill(null));
+  state.grid = keep;
+  state.clearingRows = null;
+  spawnPiece();
+}
+
+// ---------- Game lifecycle ----------
+function resetGame() {
+  state.grid = emptyGrid();
+  state.current = null;
+  state.hold = null;
+  state.canHold = true;
+  state.queue = [];
+  state.score = 0;
+  state.lines = 0;
+  state.level = 1;
+  state.fallTimer = 0;
+  state.lockTimer = 0;
+  state.softDropping = false;
+  state.clearingRows = null;
+  state.clearAnim = 0;
+  state.flashLevel = 0;
+  bag = [];
+  spawnPiece();
+  updateHUD();
+}
+
+function startGame() {
+  initAudio();
+  resetGame();
+  state.phase = 'playing';
+  hideAllOverlays();
+}
+
+function endGame() {
+  state.phase = 'gameover';
+  const newBest = state.score > state.best;
+  if (newBest) {
+    state.best = state.score;
+    localStorage.setItem('gw.best', String(state.best));
+  }
+  document.getElementById('finalScore').textContent = pad(state.score, 6);
+  document.getElementById('finalLines').textContent = pad(state.lines, 3);
+  document.getElementById('finalLevel').textContent = pad(state.level, 2);
+  document.getElementById('finalBest').textContent  = pad(state.best,  6);
+  document.getElementById('newBestMsg').style.display = newBest ? 'block' : 'none';
+  // Post to the public scoreboard (fire-and-forget).
+  if (window.NostalgiaScores) {
+    window.NostalgiaScores.submitAndReport(
+      'gridwave-2049', state.score, document.getElementById('scoreStatus')
+    );
+  }
+  showOverlay('gameoverScreen');
+  sfx.gameover();
+  updateHUD();
+}
+
+// ---------- Update (fixed-step via accumulator) ----------
+let lastT = performance.now();
+
+function update(nowMs) {
+  const dt = Math.min(60, nowMs - lastT);
+  lastT = nowMs;
+
+  if (state.phase !== 'playing') {
+    // Keep paused / gameover rendering at least once.
+    draw();
+    return;
+  }
+
+  // Line-clear flash animation blocks falling
+  if (state.clearingRows) {
+    state.clearAnim -= dt;
+    if (state.clearAnim <= 0) finishClear();
+    draw();
+    return;
+  }
+
+  if (state.flashLevel > 0) state.flashLevel = Math.max(0, state.flashLevel - dt);
+
+  // Fall gravity
+  const fall = gravityMs(state.level) / (state.softDropping ? 8 : 1);
+  state.fallTimer += dt;
+  while (state.fallTimer >= fall) {
+    state.fallTimer -= fall;
+    if (!state.current) break;
+    if (collides(state.current, 0, 1, state.current.shape)) {
+      // grounded — accumulate lock delay
+      state.lockTimer += fall;
+      if (state.lockTimer >= state.lockMax) {
+        lockPiece();
+        break;
+      }
+    } else {
+      state.current.y += 1;
+      if (state.softDropping) state.score += 1;
+      state.lockTimer = 0;
+    }
+  }
+
+  draw();
+}
+
+// ---------- Rendering ----------
+function drawPanel(x, y, w, h, title, titleColor = '--accent-2') {
+  // Outer panel with 3D-ish drop shadow, matches the screenshot vibe.
+  ctx.fillStyle = css('--panel-inner');
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = css('--panel-stroke');
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+
+  // inner subtle bevel line (top)
+  ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+  ctx.beginPath();
+  ctx.moveTo(x + 2, y + 2); ctx.lineTo(x + w - 2, y + 2);
+  ctx.stroke();
+
+  // title
+  ctx.fillStyle = css(titleColor);
+  ctx.font = 'bold 12px "Press Start 2P", monospace';
+  ctx.textBaseline = 'top';
+  ctx.fillText(title, x + 10, y - 18);
+
+  // dotted underline beneath title (references the screenshot's dashed rule)
+  ctx.strokeStyle = css('--text-dim');
+  ctx.setLineDash([2, 3]);
+  ctx.beginPath();
+  ctx.moveTo(x, y - 2); ctx.lineTo(x + w, y - 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+// Paint a single block at (cx, cy) pixel coord with a given size.
+// Styled as a flat neon chip with a highlight strip up top + shadow notch.
+function drawBlock(px, py, size, cssVar, opts = {}) {
+  const { ghost = false, flash = false } = opts;
+  if (ghost) {
+    ctx.strokeStyle = css(cssVar);
+    ctx.globalAlpha = 0.55;
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(px + 1.5, py + 1.5, size - 3, size - 3);
+    ctx.fillStyle = css('--tet-ghost');
+    ctx.fillRect(px + 3, py + 3, size - 6, size - 6);
+    ctx.globalAlpha = 1;
+    return;
+  }
+
+  if (flash) {
+    ctx.fillStyle = css('--text');
+  } else {
+    ctx.fillStyle = css(cssVar);
+  }
+  ctx.fillRect(px, py, size, size);
+
+  // Top/left highlight strip
+  ctx.fillStyle = css('--tet-hi');
+  ctx.fillRect(px, py, size, 3);
+  ctx.fillRect(px, py, 3, size);
+
+  // Bottom/right shadow strip
+  ctx.fillStyle = css('--tet-lo');
+  ctx.fillRect(px, py + size - 3, size, 3);
+  ctx.fillRect(px + size - 3, py, 3, size);
+
+  // Outer pixel grout — helps blocks read as individual chips.
+  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(px + 0.5, py + 0.5, size - 1, size - 1);
+}
+
+// Draw a small-scale piece inside a preview panel (hold / next).
+function drawPiecePreview(key, cx, cy, boxSize) {
+  const shape = PIECE_ROT[key][0];
+  // Trim empty rows/cols so the piece is centered visually.
+  let minR = shape.length, maxR = -1, minC = shape[0].length, maxC = -1;
+  for (let r = 0; r < shape.length; r++) {
+    for (let c = 0; c < shape[r].length; c++) {
+      if (shape[r][c]) {
+        if (r < minR) minR = r; if (r > maxR) maxR = r;
+        if (c < minC) minC = c; if (c > maxC) maxC = c;
+      }
+    }
+  }
+  const rows = maxR - minR + 1;
+  const cols = maxC - minC + 1;
+  const size = Math.floor(Math.min((boxSize - 20) / cols, (boxSize - 20) / rows));
+  const w = cols * size;
+  const h = rows * size;
+  const ox = cx - w / 2;
+  const oy = cy - h / 2;
+  const cssVar = PIECE_COLORS[key];
+  for (let r = minR; r <= maxR; r++) {
+    for (let c = minC; c <= maxC; c++) {
+      if (!shape[r][c]) continue;
+      drawBlock(ox + (c - minC) * size, oy + (r - minR) * size, size, cssVar);
+    }
+  }
+}
+
+function drawPlayfield() {
+  // Background
+  ctx.fillStyle = css('--playfield-bg');
+  ctx.fillRect(FIELD_X, FIELD_Y, FIELD_W, FIELD_H);
+
+  // Starfield dots for atmosphere (static seed-ish scatter — purely cosmetic)
+  ctx.fillStyle = 'rgba(255,255,255,0.12)';
+  for (const s of STARS) {
+    ctx.fillRect(FIELD_X + s.x, FIELD_Y + s.y, s.r, s.r);
+  }
+
+  // Grid lines
+  ctx.strokeStyle = css('--playfield-line');
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let c = 0; c <= COLS; c++) {
+    const gx = FIELD_X + c * BLOCK;
+    ctx.moveTo(gx + 0.5, FIELD_Y);
+    ctx.lineTo(gx + 0.5, FIELD_Y + FIELD_H);
+  }
+  for (let r = 0; r <= ROWS; r++) {
+    const gy = FIELD_Y + r * BLOCK;
+    ctx.moveTo(FIELD_X,           gy + 0.5);
+    ctx.lineTo(FIELD_X + FIELD_W, gy + 0.5);
+  }
+  ctx.stroke();
+
+  // Placed blocks
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const k = state.grid[r][c];
+      if (!k) continue;
+      const flash = state.clearingRows && state.clearingRows.includes(r)
+                    && Math.floor(state.clearAnim / 60) % 2 === 0;
+      drawBlock(FIELD_X + c * BLOCK, FIELD_Y + r * BLOCK, BLOCK,
+                PIECE_COLORS[k], { flash });
+    }
+  }
+
+  // Ghost piece (landing preview)
+  if (state.current && !state.clearingRows) {
+    const p = state.current;
+    let drop = 0;
+    while (!collides(p, 0, drop + 1, p.shape)) drop++;
+    for (let r = 0; r < p.shape.length; r++) {
+      for (let c = 0; c < p.shape[r].length; c++) {
+        if (!p.shape[r][c]) continue;
+        const gy = p.y + r + drop;
+        if (gy < 0) continue;
+        drawBlock(FIELD_X + (p.x + c) * BLOCK, FIELD_Y + gy * BLOCK, BLOCK,
+                  PIECE_COLORS[p.key], { ghost: true });
+      }
+    }
+    // Active piece on top of ghost
+    for (let r = 0; r < p.shape.length; r++) {
+      for (let c = 0; c < p.shape[r].length; c++) {
+        if (!p.shape[r][c]) continue;
+        const by = p.y + r;
+        if (by < 0) continue;
+        drawBlock(FIELD_X + (p.x + c) * BLOCK, FIELD_Y + by * BLOCK, BLOCK,
+                  PIECE_COLORS[p.key]);
+      }
+    }
+  }
+
+  // Playfield border — accentuated so it reads as the main stage
+  ctx.strokeStyle = css('--text');
+  ctx.lineWidth = 3;
+  ctx.strokeRect(FIELD_X - 1.5, FIELD_Y - 1.5, FIELD_W + 3, FIELD_H + 3);
+  ctx.strokeStyle = css('--glow');
+  ctx.globalAlpha = 0.35;
+  ctx.strokeRect(FIELD_X - 4.5, FIELD_Y - 4.5, FIELD_W + 9, FIELD_H + 9);
+  ctx.globalAlpha = 1;
+}
+
+function drawHoldPanel() {
+  drawPanel(PANEL_L_X, PANEL_L_Y, PANEL_L_W, PANEL_L_H, 'HOLD');
+  if (state.hold) {
+    const dim = !state.canHold;
+    if (dim) ctx.globalAlpha = 0.45;
+    drawPiecePreview(state.hold,
+      PANEL_L_X + PANEL_L_W / 2,
+      PANEL_L_Y + PANEL_L_H / 2,
+      Math.min(PANEL_L_W, PANEL_L_H));
+    ctx.globalAlpha = 1;
+  } else {
+    ctx.fillStyle = css('--text-dim');
+    ctx.font = '10px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('[ C ]', PANEL_L_X + PANEL_L_W / 2, PANEL_L_Y + PANEL_L_H / 2);
+    ctx.textAlign = 'left';
+  }
+}
+
+function drawNextPanel() {
+  drawPanel(PANEL_N_X, PANEL_N_Y, PANEL_N_W, PANEL_N_H, 'NEXT');
+  // Show the first two pieces from the queue, stacked.
+  const slotH = PANEL_N_H / 2;
+  for (let i = 0; i < 2; i++) {
+    const k = state.queue[i];
+    if (!k) continue;
+    // Slot 1 emphasized (larger), slot 2 a bit smaller to suggest distance.
+    const scale = i === 0 ? 1 : 0.85;
+    drawPiecePreview(k,
+      PANEL_N_X + PANEL_N_W / 2,
+      PANEL_N_Y + slotH * (i + 0.5),
+      Math.min(PANEL_N_W, slotH) * scale);
+    // Divider between the two slots
+    if (i === 0) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+      ctx.setLineDash([3, 4]);
+      ctx.beginPath();
+      ctx.moveTo(PANEL_N_X + 10, PANEL_N_Y + slotH);
+      ctx.lineTo(PANEL_N_X + PANEL_N_W - 10, PANEL_N_Y + slotH);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+}
+
+function drawStatsPanel() {
+  // Background panel without a title (labels live inline)
+  ctx.fillStyle = css('--panel-inner');
+  ctx.fillRect(PANEL_S_X, PANEL_S_Y, PANEL_S_W, PANEL_S_H);
+  ctx.strokeStyle = css('--panel-stroke');
+  ctx.lineWidth = 2;
+  ctx.strokeRect(PANEL_S_X + 0.5, PANEL_S_Y + 0.5, PANEL_S_W - 1, PANEL_S_H - 1);
+
+  const rows = [
+    { label: 'LINES', value: pad(state.lines, 3),  color: '--accent' },
+    { label: 'LEVEL', value: pad(state.level, 2),
+      color: state.flashLevel > 0 ? '--accent-hot' : '--accent-3' },
+    { label: 'SCORE', value: pad(state.score, 6),  color: '--accent-2' },
+  ];
+  const rowH = PANEL_S_H / rows.length;
+  rows.forEach((row, i) => {
+    const y = PANEL_S_Y + rowH * i;
+    // label
+    ctx.fillStyle = css('--text-dim');
+    ctx.font = '10px "JetBrains Mono", monospace';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText(row.label, PANEL_S_X + 12, y + 14);
+    // value
+    ctx.fillStyle = css(row.color);
+    ctx.font = 'bold 20px "Press Start 2P", monospace';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(row.value, PANEL_S_X + PANEL_S_W - 12, y + rowH - 14);
+    // divider
+    if (i < rows.length - 1) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+      ctx.beginPath();
+      ctx.moveTo(PANEL_S_X + 8, y + rowH - 1);
+      ctx.lineTo(PANEL_S_X + PANEL_S_W - 8, y + rowH - 1);
+      ctx.stroke();
+    }
+  });
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+}
+
+function drawLogoPanel() {
+  // Bottom-left decoration — a neon "pixel compass" like the screenshot.
+  ctx.save();
+  const cx = PANEL_LOGO_X + PANEL_LOGO_W / 2;
+  const cy = PANEL_LOGO_Y + PANEL_LOGO_H / 2;
+  const r  = Math.min(PANEL_LOGO_W, PANEL_LOGO_H) * 0.38;
+  const now = performance.now() * 0.002;
+  const pulse = 0.5 + Math.sin(now) * 0.5;
+
+  // Dotted rule above the logo
+  ctx.strokeStyle = css('--text-dim');
+  ctx.setLineDash([2, 3]);
+  ctx.beginPath();
+  ctx.moveTo(PANEL_LOGO_X, PANEL_LOGO_Y - 2);
+  ctx.lineTo(PANEL_LOGO_X + PANEL_LOGO_W, PANEL_LOGO_Y - 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Star / compass arms
+  ctx.fillStyle = css('--glow');
+  const arms = [
+    [0, -1], [1, 0], [0, 1], [-1, 0],
+  ];
+  for (const [ax, ay] of arms) {
+    ctx.beginPath();
+    ctx.moveTo(cx + ax * r,        cy + ay * r);
+    ctx.lineTo(cx + ax * 4 + ay * 4, cy + ay * 4 - ax * 4);
+    ctx.lineTo(cx,                 cy);
+    ctx.lineTo(cx + ax * 4 - ay * 4, cy + ay * 4 + ax * 4);
+    ctx.closePath();
+    ctx.fill();
+  }
+  // Diagonal short rays
+  ctx.globalAlpha = 0.45 + pulse * 0.3;
+  const diag = [
+    [1, 1], [-1, 1], [1, -1], [-1, -1],
+  ];
+  ctx.fillStyle = css('--accent-2');
+  for (const [ax, ay] of diag) {
+    ctx.beginPath();
+    const m = r * 0.5;
+    ctx.moveTo(cx + ax * m, cy + ay * m);
+    ctx.lineTo(cx + ax * m * 0.35 + ay * 2, cy + ay * m * 0.35 - ax * 2);
+    ctx.lineTo(cx,          cy);
+    ctx.lineTo(cx + ax * m * 0.35 - ay * 2, cy + ay * m * 0.35 + ax * 2);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // Center pip
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.arc(cx, cy, 3 + pulse * 1.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+// Cheap background star field inside the playfield
+const STARS = Array.from({length: 38}, () => ({
+  x: Math.floor(Math.random() * FIELD_W),
+  y: Math.floor(Math.random() * FIELD_H),
+  r: Math.random() < 0.2 ? 2 : 1,
+}));
+
+function draw() {
+  // Clear
+  ctx.fillStyle = css('--bg-alt');
+  ctx.fillRect(0, 0, W, H);
+
+  drawPlayfield();
+  drawHoldPanel();
+  drawNextPanel();
+  drawStatsPanel();
+  drawLogoPanel();
+
+  // Scanlines overlay — very subtle
+  ctx.fillStyle = 'rgba(0,0,0,0.05)';
+  for (let y = 0; y < H; y += 3) ctx.fillRect(0, y, W, 1);
+}
+
+// ---------- HUD wiring ----------
+function updateHUD() {
+  document.getElementById('hudScore').textContent = pad(state.score, 6);
+  document.getElementById('hudLevel').textContent = pad(state.level, 2);
+  document.getElementById('hudLines').textContent = pad(state.lines, 3);
+  document.getElementById('hudBest').textContent  = pad(state.best,  6);
+}
+
+// ---------- Overlays ----------
+const { show: showOverlay, hideAll: hideAllOverlays } = createOverlayManager(
+  ['startScreen', 'pauseScreen', 'gameoverScreen']
+);
+
+// ---------- Input ----------
+// Auto-repeat (DAS) for horizontal movement keeps the piece moving as long
+// as left/right is held, after a short initial delay.
+const held = { left: false, right: false, down: false };
+let dasTimer = 0, dasDir = 0;
+const DAS_INITIAL = 160;    // ms before repeats start
+const DAS_REPEAT  = 55;     // ms between repeats once started
+let repeatClock = 0;
+
+function onKeyDown(e) {
+  if (state.phase === 'menu' || state.phase === 'gameover') {
+    if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'Enter') {
+      startGame();
+      e.preventDefault();
+    }
+    return;
+  }
+  if (state.phase === 'paused') {
+    if (e.code === 'KeyP' || e.code === 'Escape') {
+      state.phase = 'playing';
+      hideAllOverlays();
+    }
+    return;
+  }
+  // playing
+  switch (e.code) {
+    case 'ArrowLeft':  held.left = true;  dasDir = -1; dasTimer = 0; move(-1); break;
+    case 'ArrowRight': held.right = true; dasDir = +1; dasTimer = 0; move(+1); break;
+    case 'ArrowDown':  held.down = true;  state.softDropping = true;          break;
+    case 'KeyX':       rotate(+1); break;
+    case 'KeyZ':       rotate(-1); break;
+    case 'KeyC':
+    case 'ShiftLeft':
+    case 'ShiftRight': hold(); break;
+    case 'KeyP':
+    case 'Escape':     state.phase = 'paused'; showOverlay('pauseScreen'); break;
+    case 'KeyM':       audio.toggle(); updateMuteLabel(); break;
+  }
+}
+function onKeyUp(e) {
+  if (e.code === 'ArrowLeft')  { held.left = false;  if (dasDir === -1) dasDir = held.right ? +1 : 0; }
+  if (e.code === 'ArrowRight') { held.right = false; if (dasDir === +1) dasDir = held.left  ? -1 : 0; }
+  if (e.code === 'ArrowDown')  { held.down = false;  state.softDropping = false; }
+}
+document.addEventListener('keydown', onKeyDown);
+document.addEventListener('keyup',   onKeyUp);
+
+// DAS repeat tick — advanced inside the RAF loop so dt is accurate.
+function tickDAS(dt) {
+  if (!dasDir) { dasTimer = 0; repeatClock = 0; return; }
+  dasTimer += dt;
+  if (dasTimer < DAS_INITIAL) return;
+  repeatClock += dt;
+  while (repeatClock >= DAS_REPEAT) {
+    repeatClock -= DAS_REPEAT;
+    move(dasDir);
+  }
+}
+
+// Touch controls
+function bindTouch(id, fn) {
+  const el = document.getElementById(id);
+  const start = (e) => { e.preventDefault(); fn(); };
+  el.addEventListener('touchstart', start, { passive: false });
+  el.addEventListener('mousedown',  start);
+}
+// Drop button on touch is a hold-style soft drop: press to start the fast
+// fall, release to return to normal gravity.
+function bindSoftDropHold(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const press = (e) => { e.preventDefault(); state.softDropping = true; };
+  const release = (e) => { state.softDropping = false; };
+  el.addEventListener('touchstart', press,   { passive: false });
+  el.addEventListener('touchend',   release, { passive: false });
+  el.addEventListener('touchcancel',release, { passive: false });
+  el.addEventListener('mousedown',  press);
+  el.addEventListener('mouseup',    release);
+  el.addEventListener('mouseleave', release);
+}
+bindTouch('tLeft',  () => move(-1));
+bindTouch('tRight', () => move(+1));
+bindSoftDropHold('tDrop');
+bindTouch('tRot',   () => rotate(+1));
+bindTouch('tHold',  () => hold());
+if (/Mobi|Android|iPhone|iPad/.test(navigator.userAgent)) {
+  document.getElementById('touch').style.display = 'flex';
+}
+
+// ---------- Overlays / buttons ----------
+document.getElementById('startBtn').addEventListener('click', startGame);
+document.getElementById('retryBtn').addEventListener('click', startGame);
+document.getElementById('resumeBtn').addEventListener('click', () => {
+  state.phase = 'playing';
+  hideAllOverlays();
+});
+document.getElementById('restartBtnPause').addEventListener('click', startGame);
+
+function updateMuteLabel() {
+  const el = document.getElementById('muteBtnMenu');
+  if (el) el.textContent = audio.muted ? '♪ SOUND OFF' : '♪ SOUND ON';
+}
+document.getElementById('muteBtnMenu').addEventListener('click', () => {
+  audio.toggle();
+  updateMuteLabel();
+});
+updateMuteLabel();
+
+// ---------- Main loop ----------
+function frame(nowMs) {
+  const dt = Math.min(60, nowMs - lastT);
+  // Don't reset lastT here — update() does that.
+  tickDAS(dt);
+  update(nowMs);
+  requestAnimationFrame(frame);
+}
+fitCanvas(cvs);
+showOverlay('startScreen');
+updateHUD();
+requestAnimationFrame(frame);
+
+})();
+</script>
+</body>
+</html>
