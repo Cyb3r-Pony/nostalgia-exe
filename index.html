@@ -840,7 +840,16 @@
   }
   @media (pointer: fine) { .cursor-dot { display: block; } }
 
-  /* ---------- Responsive ---------- */
+  /* ---------- Responsive ----------
+     Three breakpoints from widest to narrowest. Each block ONLY sets
+     what changes vs. the previous; rules cascade from desktop → tablet
+     → small phone → tiny phone, so every override stays minimal.
+
+     Targets:
+       1024  iPad-portrait / small tablet
+        640  large phone landscape / small tablet
+        480  iPhone-class portrait
+        380  compact / older phones                                       */
   @media (max-width: 1024px) {
     .game-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .hero-grid { grid-template-columns: 1fr; gap: 32px; }
@@ -851,8 +860,8 @@
 
   @media (max-width: 640px) {
     .container { padding: 0 16px; }
-    .game-grid { grid-template-columns: 1fr; }
-    .footer-grid { grid-template-columns: 1fr; }
+    .game-grid { grid-template-columns: 1fr; gap: 16px; }
+    .footer-grid { grid-template-columns: 1fr; gap: 28px; }
     nav ul { display: none; position: absolute; top: 100%; left: 0; right: 0; flex-direction: column; background: var(--panel); border-bottom: 1px solid var(--border); padding: 16px; }
     nav ul.open { display: flex; }
     nav ul a { display: block; padding: 12px; border: 1px solid var(--border); }
@@ -860,6 +869,98 @@
     .bg-grid { background-size: 40px 40px; }
     .hero { padding: 32px 0 48px; }
     .section { padding: 48px 0; }
+    /* Trim the section padding around the games grid + about so
+       the page reads tighter on tablets-down without the headers
+       feeling cramped against the cards. */
+    .section-head { margin-bottom: 24px; }
+    .strip-track { gap: 32px; font-size: 11px; }
+    .filter-bar { padding: 10px; gap: 6px; }
+    .chip { font-size: 10px; padding: 5px 10px; }
+    /* About panel breathes a little less */
+    .panel-body { padding: 18px; }
+    .about-text p { font-size: 14px; }
+    /* Footer */
+    footer { padding: 36px 0 20px; }
+    .footer-bottom { font-size: 10px; }
+  }
+
+  /* ---------- Phone-sized portrait ---------- */
+  @media (max-width: 480px) {
+    .container { padding: 0 14px; }
+
+    /* Header — every element shrinks proportionally so the row
+       still reads cleanly without the auth chip / hamburger fighting
+       the logo for space. */
+    .nav { padding: 12px 0; gap: 10px; }
+    .logo { gap: 8px; font-size: 11px; letter-spacing: 0.5px; }
+    .logo-mark { width: 26px; height: 26px; }
+    .logo-mark::before { width: 11px; height: 11px; }
+    .icon-btn { width: 32px; height: 32px; }
+    .icon-btn svg { width: 14px; height: 14px; }
+    .theme-toggle { width: 56px; height: 26px; }
+    .theme-toggle::after { width: 20px; height: 20px; }
+    [data-theme="light"] .theme-toggle::after { transform: translateX(32px); }
+    .nav-actions { gap: 6px; }
+
+    /* Hero — drop padding, shrink the meta row, lighten the title's
+       leading so 3-line wrapping at this width doesn't tower. */
+    .hero { padding: 24px 0 36px; }
+    .hero-meta { font-size: 10px; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+    h1.hero-title { font-size: clamp(26px, 8vw, 34px); line-height: 1.1; margin-bottom: 16px; }
+    .hero-sub { font-size: 14px; margin-bottom: 22px; line-height: 1.5; }
+    .cta-group { gap: 10px; }
+    .btn { font-size: 12px; padding: 12px 16px; box-shadow: 4px 4px 0 var(--text); letter-spacing: 1px; }
+    .btn:hover { box-shadow: 6px 6px 0 var(--text); }
+
+    /* Strip marquee */
+    .strip { padding: 14px 0; }
+    .strip-track { font-size: 10px; gap: 28px; }
+
+    /* Section heads */
+    .section { padding: 36px 0; }
+    .section-title { font-size: 22px; }
+    .section-desc { font-size: 13px; }
+
+    /* Game grid is already 1 column at 640px; just tighten card chrome. */
+    .game-grid { gap: 14px; }
+    .card-window { padding: 5px 8px; font-size: 9px; }
+    .card-body { padding: 12px; }
+    .card-title { font-size: 12px; }
+    .card-genre { font-size: 9px; }
+    .card-meta { font-size: 10px; }
+
+    /* About */
+    .about-feature h4 { font-size: 10px; }
+    .about-feature p { font-size: 12px; }
+    .about-feature-icon { width: 36px; height: 36px; }
+    .about-feature-icon svg { width: 18px; height: 18px; }
+    .panel-header { font-size: 10px; padding: 8px 12px; }
+
+    /* Footer */
+    .footer-grid { gap: 22px; margin-bottom: 24px; }
+    .footer-col h5 { font-size: 9px; margin-bottom: 12px; }
+    .footer-col a { font-size: 12px; padding: 4px 0; }
+
+    /* Background chrome — fewer floaters, thinner scrollbar.
+       :nth-child(n+5) hides shapes 5+ on small screens so the
+       background has 4 max instead of the desktop 14. */
+    .floaters .floater:nth-child(n+5) { display: none; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+  }
+
+  /* ---------- Compact / older phones (≤380px wide) ---------- */
+  @media (max-width: 380px) {
+    .container { padding: 0 12px; }
+    /* Drop the SYS.ONLINE meta strip — pure decoration, costs a row. */
+    .hero-meta { display: none; }
+    /* Hide the .EXE suffix in the logo so the wordmark fits next to
+       the theme toggle + auth chip + hamburger at 320–360px widths.
+       (The actual markup wraps ".EXE" in <span class="dot">.) */
+    .logo-text .dot { display: none; }
+    h1.hero-title { font-size: 24px; }
+    .btn { padding: 11px 14px; font-size: 11px; }
+    /* Hide the cosmetic floaters entirely on the smallest screens. */
+    .floaters { display: none; }
   }
 
   @media (prefers-reduced-motion: reduce) {

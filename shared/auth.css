@@ -63,6 +63,13 @@
 .auth-modal {
   width: 100%;
   max-width: 420px;
+  /* Cap the modal at 90% of the viewport height so on short phones
+     (e.g. landscape, or with a tall keyboard pushed up) the OAuth
+     buttons + banner at the bottom never get clipped — the modal
+     scrolls inside instead. */
+  max-height: 90vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: var(--panel);
   border: 1px solid var(--border);
   box-shadow: 8px 8px 0 var(--shadow-off);
@@ -374,6 +381,28 @@
   .auth-modal { max-width: 100%; box-shadow: 6px 6px 0 var(--shadow-off); }
   .auth-panel { padding: 18px; }
   .auth-chip .chip-name { max-width: 80px; }
+}
+
+/* Even tighter at phone-portrait widths so the email + password form +
+   "OR" divider + Google + GitHub buttons all fit on a 360x640 viewport
+   without aggressive scrolling. */
+@media (max-width: 480px) {
+  .auth-panel { padding: 16px 16px 18px; }
+  .auth-panel h2 { font-size: 12px; }
+  .auth-panel p.auth-blurb { font-size: 12px; margin-bottom: 14px; }
+  .auth-field { margin-bottom: 12px; }
+  .auth-input { padding: 10px 12px; font-size: 13px; }
+  .auth-submit { padding: 11px 12px; font-size: 10px; }
+  .auth-or { margin: 14px 0 12px; font-size: 10px; }
+  .auth-oauth { padding: 11px 12px; font-size: 10px; }
+  .auth-tab { padding: 12px 8px; font-size: 11px; }
+}
+
+@media (max-width: 380px) {
+  .auth-backdrop { padding: 10px; }
+  .auth-modal-title { font-size: 9px; }
+  .auth-modal-header { padding: 8px 10px; }
+  .auth-panel { padding: 14px 14px 16px; }
 }
 
 /* ---------- Hide footer actions when locked (username-setup mode) ---------- */

@@ -288,13 +288,52 @@
   .page-foot {
     max-width: 1200px;
     margin: 40px auto 0;
-    padding: 0 24px;
+    padding: 0 24px 24px;
     color: var(--text-dim);
     font-size: 11px;
     text-align: center;
   }
   .page-foot a { color: var(--accent-2); text-decoration: none; }
   .page-foot a:hover { text-decoration: underline; }
+
+  /* ---------- Mobile ----------
+     The desktop grid uses `minmax(320px, 1fr)`. At ≤360px viewport
+     widths that minimum exceeds the available content width and the
+     grid would push horizontal scroll, so we drop the floor on phones
+     and shrink card chrome / row sizes proportionally.                  */
+  @media (max-width: 640px) {
+    main { padding: 24px 16px 0; }
+    .page-foot { padding: 0 16px 24px; }
+    .topbar { padding: 8px 14px; }
+    .back { font-size: 11px; padding: 6px 10px; }
+    .title-tag { font-size: 10px; }
+    .title-tag .ver { font-size: 9px; }
+    .page-title { font-size: 22px; }
+    .page-desc { font-size: 13px; }
+    .board-grid {
+      grid-template-columns: 1fr;
+      gap: 14px;
+    }
+    .board-card-head { padding: 12px 14px; }
+    .board-card-head h3 { font-size: 11px; letter-spacing: 0.5px; }
+    .play-link { font-size: 9px; padding: 4px 7px; }
+    .board-row {
+      grid-template-columns: 30px 1fr auto;
+      padding: 9px 12px;
+      font-size: 12px;
+      gap: 8px;
+    }
+    .board-row .rank { font-size: 10px; }
+    .board-row .score { font-size: 10px; }
+    .board-row .tsx { font-size: 9px; }
+    .auth-banner { font-size: 11px; padding: 12px 14px; gap: 8px; }
+  }
+
+  @media (max-width: 380px) {
+    main { padding: 20px 12px 0; }
+    .title-tag .ver { display: none; }
+    .page-title { font-size: 20px; }
+  }
 </style>
 </head>
 <body>

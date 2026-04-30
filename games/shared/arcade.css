@@ -362,6 +362,11 @@ kbd {
 
 ::selection { background: var(--accent-2); color: var(--bg); }
 
+/* ---------- Mobile / touch layout ---------- */
+/* Three-tier scale-down for game pages.
+     780  large phone landscape / small tablet
+     480  iPhone-class portrait
+     380  compact / older phones                                          */
 @media (max-width: 780px) {
   .hud { font-size: 9px; padding: 6px 10px; }
   .hud-stat strong { font-size: 10px; }
@@ -371,6 +376,58 @@ kbd {
   .touch { display: flex; }
   .stage { bottom: 140px; }
   .overlay { inset: 98px 0 140px 0; }
+}
+
+@media (max-width: 480px) {
+  /* Top bar: shorter back-button label, smaller version tag, less padding. */
+  .topbar { padding: 8px 12px; }
+  .back { font-size: 11px; padding: 6px 10px; letter-spacing: 0.5px; }
+  .title-tag { font-size: 10px; letter-spacing: 1px; }
+  .title-tag .ver { font-size: 8px; margin-left: 6px; }
+  .theme-toggle { width: 50px; height: 24px; }
+  .theme-toggle::after { width: 18px; height: 18px; }
+  [data-theme="light"] .theme-toggle::after { transform: translateX(28px); }
+
+  /* HUD: shrink the stat blocks, reduce gap, allow wrap if needed. */
+  .hud { padding: 5px 10px; gap: 8px; }
+  .hud-col { gap: 10px; }
+  .hud-stat strong { font-size: 9px; }
+  .pu-badge { min-width: 22px; height: 22px; font-size: 8px; padding: 0 4px; }
+  .pu-badge .lv { font-size: 6px; margin-left: 2px; }
+
+  /* Game-over / pause card: narrower padding so all the buttons +
+     stat row fit at 360px without horizontal pinch. */
+  .card { padding: 22px 18px; }
+  .card-head { margin: -22px -18px 18px; padding: 8px 12px; font-size: 9px; }
+  .card h1 { font-size: 18px; margin-bottom: 8px; }
+  .card h2 { font-size: 14px; margin-bottom: 12px; }
+  .card p { font-size: 12px; margin-bottom: 16px; }
+  .card .stat-row { padding: 10px; gap: 8px; }
+  .card .stat-row strong { font-size: 14px; }
+  .card .score-status { font-size: 10px; }
+  .btn { font-size: 11px; padding: 11px 16px; letter-spacing: 1px; box-shadow: 4px 4px 0 var(--text); margin: 3px; }
+  .btn:hover { box-shadow: 6px 6px 0 var(--text); }
+
+  /* Touch buttons — slightly smaller so they don't dominate the
+     bottom of the screen, but still hit-target ≥ 44px. */
+  .touch { padding: 12px; bottom: 44px; }
+  .touch button { width: 64px; height: 64px; font-size: 18px; box-shadow: 3px 3px 0 var(--text); }
+  .touch .right-cluster { gap: 8px; }
+  .stage { bottom: 124px; padding: 4px; }
+  .overlay { inset: 92px 0 124px 0; padding: 14px; }
+
+  /* Bottom bar — tighter so it doesn't crowd the touch buttons. */
+  .bottombar { padding: 6px 10px; min-height: 36px; font-size: 9px; }
+}
+
+@media (max-width: 380px) {
+  /* Older / compact phones: hide the version tag in the topbar so the
+     game title doesn't fight the back button for space. */
+  .title-tag .ver { display: none; }
+  .back { letter-spacing: 0; }
+  .card { padding: 18px 14px; }
+  .card-head { margin: -18px -14px 14px; }
+  .touch button { width: 56px; height: 56px; font-size: 16px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
