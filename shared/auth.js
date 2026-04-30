@@ -507,6 +507,20 @@
   }
 
   // ---------- Boot ----------
+  // `whenReady()` resolves once init() has finished its initial session
+  // load (or timed out). Callers like scores.js wait on this before
+  // deciding whether the user is signed-out — otherwise a fast game-end
+  // on a freshly navigated page can race the boot and drop a real score
+  // because `isAuthenticated()` was momentarily false.
+  let bootResolve;
+  const bootReady = new Promise((r) => { bootResolve = r; });
+  let booted = false;
+  function markBooted() {
+    if (booted) return;
+    booted = true;
+    try { bootResolve(); } catch (_) {}
+  }
+
   async function init() {
     if (!client) {
       state.status = 'signed-out';
@@ -514,22 +528,32 @@
         ? 'Supabase is not configured. Fill in shared/supabase-config.js.'
         : 'supabase-js failed to load.';
       emit();
+      markBooted();
       return;
     }
 
-    // Subscribe to Supabase's own auth events so we stay in sync across
-    // tabs and after email confirmation redirects.
-    client.auth.onAuthStateChange(async (_event, session) => {
-      state.session = session || null;
-      await hydrateProfile();
-      emit();
-    });
-
-    // Initial session load, with a hard timeout so a stalled fetch
-    // (common on file:// URLs) can never leave the UI in 'loading' forever.
+    // Resolve the persisted session BEFORE subscribing to auth events.
+    //
+    // Why this order matters:
+    //   `onAuthStateChange` fires `INITIAL_SESSION` immediately on
+    //   subscription. If we subscribe first, supabase-js can call our
+    //   handler with `session = null` while it's still mid-refreshing
+    //   the access_token from localStorage. Our handler would then run
+    //   `hydrateProfile()` → status='signed-out' → emit → UI flickers
+    //   to "Sign in" until the refresh completes a few seconds later.
+    //
+    //   By awaiting getSession() first, we let supabase-js settle on the
+    //   real session (including a refresh round-trip if needed) and emit
+    //   exactly once with the correct state. Subscribing after gives us
+    //   ongoing sign-in / sign-out / TOKEN_REFRESHED events without the
+    //   boot-time race.
+    //
+    //   8 s timeout (was 4) gives slow networks more room for the
+    //   refresh round-trip; the UI sits at 'loading' / "CONNECTING"
+    //   the whole time, never flickering to 'signed-out'.
     try {
       const { data } = await withTimeout(
-        client.auth.getSession(), 4000, 'getSession'
+        client.auth.getSession(), 8000, 'getSession'
       );
       state.session = data && data.session ? data.session : null;
     } catch (err) {
@@ -538,12 +562,27 @@
     }
     await hydrateProfile();
     emit();
+    markBooted();
+
+    // Now safe to subscribe — any further events are real state changes
+    // (sign-in via modal, sign-out, cross-tab sync, token refresh) and
+    // should drive a re-hydrate + emit.
+    client.auth.onAuthStateChange(async (_event, session) => {
+      state.session = session || null;
+      await hydrateProfile();
+      emit();
+    });
   }
 
   // ---------- Export ----------
   window.NostalgiaAuth = {
     // lifecycle
     init,
+    /** Resolves once init() has finished its initial session load.
+     *  Use it before any code that depends on the auth state being
+     *  settled — e.g. submitting a score immediately after a navigation. */
+    whenReady() { return bootReady; },
+    isBooted()  { return booted; },
     // reactive
     onChange,
     // queries

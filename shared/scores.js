@@ -256,6 +256,18 @@
     }
 
     const Auth = window.NostalgiaAuth;
+
+    // Wait for the auth module to finish its initial session load before
+    // deciding whether the user is signed-out. Without this, finishing a
+    // game faster than the page's auth.js can recover the persisted
+    // session (~1–8 s on slow networks while the access_token refreshes)
+    // would drop a real score on the floor with a misleading
+    // "Sign in to post…" error. whenReady() resolves the moment
+    // getSession() settles, then we evaluate the actual auth state.
+    if (Auth && typeof Auth.whenReady === 'function') {
+      try { await Auth.whenReady(); } catch (_) { /* fall through to checks */ }
+    }
+
     if (!Auth || !Auth.isAuthenticated()) {
       return { ok: false, error: 'Sign in to post to the public scoreboard.', signedOut: true };
     }
@@ -330,15 +342,28 @@
   // without awaiting. Returns the same shape as submit().
   async function submitAndReport(slug, score, statusEl) {
     // Show an immediate "posting" state so the user sees something
-    // happening even before the network request comes back.
+    // happening even before the network request comes back. We pretend
+    // this is the loading state regardless of whether auth is ready —
+    // the message is honest either way ("posting…" once auth resolves).
     if (statusEl) applyStatus(statusEl, 'loading', 'Posting to scoreboard…');
 
-    // Short-circuits before any network hop:
     if (!client) {
       applyStatus(statusEl, 'warn', 'Scoreboard offline — your local best still saved.');
       return { ok: false, error: 'offline' };
     }
+
     const Auth = window.NostalgiaAuth;
+
+    // Same boot-race fix as in submit(): a user can finish a game
+    // faster than auth.js recovers the persisted session on a fresh
+    // page load. Wait for whenReady() before deciding the user is
+    // signed-out, otherwise we'd drop the score with a misleading
+    // "Sign in on the hub" message. The status line keeps showing
+    // "Posting to scoreboard…" while we wait, which is still honest.
+    if (Auth && typeof Auth.whenReady === 'function') {
+      try { await Auth.whenReady(); } catch (_) { /* fall through to checks */ }
+    }
+
     const notAuthed = !Auth || !Auth.isAuthenticated();
     if (notAuthed) {
       applyStatus(statusEl, 'info', 'Sign in on the hub to post to the public scoreboard.');
