@@ -1228,6 +1228,37 @@ class Game {
     }));
   }
 
+  // Triggered after a wave clear or boss defeat. Normally shows the
+  // upgrade overlay and gates the next level on the player picking a
+  // perk. BUT when every perk is at maxLv 5 (or otherwise un-pickable)
+  // there's nothing to choose — the run would soft-lock on the
+  // upgrade screen because `pick()` rejects every card. We avoid
+  // that by checking up-front: if no card can be picked, skip the
+  // overlay entirely and advance straight to the next level. The
+  // level-up sound + HUD increment + new wave appearing are the
+  // player's "you cleared something" feedback in that case.
+  //
+  // This unblocks runs past level ~25 where a maxed-out build leaves
+  // every card greyed out (reported in production).
+  _promptUpgrade() {
+    this.opts = this.getOpts();
+    const anyUpgradable = this.opts.some(o => o.canPick);
+    if (!anyUpgradable) {
+      // Max build reached — fast-forward to the next wave.
+      this.level++;
+      this.state = 'playing';
+      this.setupLevel();
+      sfx.lvlup();
+      updateHUD();
+      return;
+    }
+    this.state = 'upgrade';
+    sfx.lvlup();
+    populateUpgradeUI(this.opts, this.pLv);
+    showOverlay('upgradeScreen');
+    updateHUD();
+  }
+
   // ------- Update -------
   update() {
     if (this.state !== 'playing') return;
@@ -1428,12 +1459,7 @@ class Game {
         this.boss = null;
         this.laserOn = false; this.laserT = 0; this.laserCD = 0;
         this.pBullets = []; this.eBullets = [];
-        this.opts = this.getOpts();
-        this.state = 'upgrade';
-        sfx.lvlup();
-        populateUpgradeUI(this.opts, this.pLv);
-        showOverlay('upgradeScreen');
-        updateHUD();
+        this._promptUpgrade();
         return;
       }
     } else {
@@ -1460,11 +1486,7 @@ class Game {
       this.laserCD = 0;
       this.pBullets = [];
       this.eBullets = [];
-      this.opts = this.getOpts();
-      this.state = 'upgrade';
-      sfx.lvlup();
-      populateUpgradeUI(this.opts, this.pLv);
-      showOverlay('upgradeScreen');
+      this._promptUpgrade();
       return;
     }
 
