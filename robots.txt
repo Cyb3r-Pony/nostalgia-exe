@@ -1,0 +1,123 @@
+# =============================================================
+# NOSTALGIA.EXE — robots.txt
+# Crawler policy for retroarcadegames.org
+# -------------------------------------------------------------
+# This is a tiny static site with no admin routes, no user
+# uploads, no API surface. We let everything be crawled,
+# explicitly include AI / LLM crawlers (so the site shows up
+# in ChatGPT / Claude / Perplexity / Google AI search), and
+# only block the .git folder out of cleanliness — it shouldn't
+# be served by a properly configured static host anyway.
+# =============================================================
+
+# -------------------------------------------------------------
+# Generic policy — every crawler not named below.
+# -------------------------------------------------------------
+User-agent: *
+Allow: /
+Disallow: /.git/
+Disallow: /.DS_Store
+
+# -------------------------------------------------------------
+# Search engine crawlers (allow explicitly, no rate limits).
+# -------------------------------------------------------------
+User-agent: Googlebot
+Allow: /
+
+User-agent: Googlebot-Image
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: DuckDuckBot
+Allow: /
+
+User-agent: Slurp
+Allow: /
+
+User-agent: Baiduspider
+Allow: /
+
+User-agent: YandexBot
+Allow: /
+
+User-agent: Applebot
+Allow: /
+
+# -------------------------------------------------------------
+# AI / LLM training + retrieval crawlers.
+# We deliberately allow these so NOSTALGIA.EXE is discoverable
+# and citable from ChatGPT, Claude, Perplexity, Gemini, and
+# anything else that respects robots.txt. If you ever want to
+# opt out of AI training, flip these from Allow to Disallow.
+# -------------------------------------------------------------
+
+# OpenAI — separate UAs for training, browsing, and search index.
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+# Anthropic — Claude.
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: claude-searchbot
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+# Google — `Google-Extended` is the AI-training opt-out token
+# (separate from Googlebot, which always indexes for Search).
+User-agent: Google-Extended
+Allow: /
+
+# Perplexity.
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Perplexity-User
+Allow: /
+
+# Common Crawl — a public dataset many models train on.
+User-agent: CCBot
+Allow: /
+
+# Apple — `Applebot-Extended` controls Apple Intelligence training
+# (separate from Applebot, which indexes Siri / Spotlight).
+User-agent: Applebot-Extended
+Allow: /
+
+# Meta.
+User-agent: Meta-ExternalAgent
+Allow: /
+
+User-agent: FacebookBot
+Allow: /
+
+User-agent: facebookexternalhit
+Allow: /
+
+# ByteDance / TikTok.
+User-agent: Bytespider
+Allow: /
+
+# Amazon.
+User-agent: Amazonbot
+Allow: /
+
+# DiffBot, Mistral, Cohere, others can be added the same way.
+
+# -------------------------------------------------------------
+# Sitemap location — every well-behaved crawler will fetch this.
+# -------------------------------------------------------------
+Sitemap: https://retroarcadegames.org/sitemap.xml
